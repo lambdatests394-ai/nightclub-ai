@@ -10,11 +10,13 @@ Night Club AI usa FastAPI y SQLAlchemy para operaciones de aplicación que hacen
 
 El runtime de la aplicación usa SQLAlchemy asíncrono con el controlador `asyncpg`, a partir de `DATABASE_URL`. Alembic usa SQLAlchemy síncrono con `psycopg`, a partir de `DATABASE_MIGRATION_URL` (o `DATABASE_URL` normalizada a `postgresql+psycopg` cuando corresponda).
 
-La decisión es intencional: los servicios de dominio que participan en flujos de aplicación y los futuros endpoints FastAPI se exponen como `async def`; `state_machine.py` y `workflow_service.py` siguen esa convención aunque la máquina de estados hoy no haga E/S. Los scripts de migración permanecen síncronos y no reutilizan el `AsyncEngine` ni la sesión de runtime.
+La decisión es intencional: E/S asíncrona, lógica pura síncrona. Los repositorios, proveedores de red y servicios/endpoints que esperan E/S usan `async def`; la evaluación de políticas, permisos y reglas puras no requiere corutinas. Los scripts de migración permanecen síncronos y no reutilizan el `AsyncEngine` ni la sesión de runtime.
+
+**Aclaración aprobada, 2026-09-08 (checkpoint humano de Prompt 4):** esta regla sustituye la obligación anterior de hacer asíncrona toda lógica pura. El código existente de `state_machine.py` y `workflow_service.py` conserva su interfaz de Prompt 3; no se autoriza refactorizar contenido en Prompt 4. La corrección de este ADR es documental.
 
 ## Consecuencias
 
 - Los adaptadores de persistencia de aplicación deberán usar `AsyncSession` y sus métodos se esperarán con `await`.
 - Las futuras rutas FastAPI y servicios de dominio que intervengan en una operación de aplicación deberán conservar la cadena asíncrona, sin llamadas bloqueantes a `psycopg`.
 - Las migraciones usarán únicamente el motor síncrono configurado en `backend/migrations/env.py`; este camino queda reservado para DDL y mantenimiento, no para lógica de negocio.
-- Pruebas de lógica pura pueden ejecutar corutinas de forma controlada, sin convertir la lógica de migración en asíncrona.
+- Las nuevas políticas puras se prueban directamente como funciones síncronas. Las pruebas de interfaces asíncronas existentes siguen esperando sus corutinas explícitamente; la lógica de migración continúa síncrona.
