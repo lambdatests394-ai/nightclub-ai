@@ -66,3 +66,25 @@ Validar las migraciones de Night Club AI contra una base PostgreSQL local y dese
 - `scripts/local-dev/auth_stub.sql` es exclusivamente un fixture local.
 - Nunca aplique el fixture, estas migraciones de validación ni `sql/003_rls.sql` a Supabase desde este flujo.
 - No registre contraseñas en comandos compartidos, archivos, commits ni salidas de CI.
+
+## Prompt 4 — integración local reutilizable
+
+El checkpoint humano autoriza únicamente `nightclub_ai_prompt4_test`, en `127.0.0.1` o `localhost:5432`, con `alembic_test_user`. El rol se conserva: LOGIN/CREATEDB verdaderos; SUPERUSER/CREATEROLE/REPLICATION/BYPASSRLS falsos. Nunca se usa como `DATABASE_URL` de FastAPI.
+
+Desde la raíz, configure `DATABASE_MIGRATION_URL` solo en la sesión con la contraseña local suministrada por el owner (URL-encode si contiene caracteres reservados). El siguiente texto contiene un placeholder, no una credencial:
+
+```powershell
+$env:DATABASE_MIGRATION_URL = "postgresql+psycopg://alembic_test_user:<password>@127.0.0.1:5432/nightclub_ai_prompt4_test"
+try {
+    .\.venv\Scripts\python.exe -u scripts/local-dev/validate_prompt4.py
+    if ($LASTEXITCODE -ne 0) { throw "La validación local falló; revise la salida y la limpieza." }
+} finally {
+    Remove-Item Env:\DATABASE_MIGRATION_URL -ErrorAction SilentlyContinue
+}
+```
+
+El harness valida e imprime host/atributos del rol sin URL ni contraseña; rechaza otra base/rol/puerto/driver y rechaza una base ya existente. Después crea su base, aplica el fixture mínimo aprobado **fuera de Alembic**, ejecuta `alembic upgrade head` y `pytest backend/tests --local-postgres -q`, consulta la revisión real y elimina la base en `finally`. No fuerza cierres de sesiones, no borra el rol y comprueba su conservación. Una caída abrupta del proceso puede impedir `finally`: inspeccione catálogo/sesiones y solicite limpieza explícita antes de reintentar si la base permanece.
+
+Las pruebas inyectan un motor asyncpg de alcance exclusivo al fixture, derivado de la URL de migración validada; no asignan el rol de validación al runtime. Cada caso usa transacción externa y savepoints, rollback y cierre del motor. Sin `--local-postgres`, estas pruebas se omiten explícitamente y la suite offline sigue siendo ejecutable.
+
+No se crea nueva migración, no se amplía `auth_stub.sql`, no se ejecuta `sql/003_rls.sql`, no se conecta a Supabase. El harness de Prompt 4 no sustituye el ciclo upgrade/downgrade/upgrade y verificación de catálogo de Prompt 3: valida las migraciones existentes y la integración identity aprobada.
