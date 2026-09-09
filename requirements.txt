@@ -1,7 +1,9 @@
 fastapi[standard]==0.136.3
 pydantic-settings==2.15.0
 pytest==9.1.1
+PyJWT[crypto]==2.13.0
+httpx==0.28.1
 SQLAlchemy==2.0.52
 alembic==1.19.1
 asyncpg==0.31.0
-psycopg[binary]==3.3.5                                                                                                                                                               
+psycopg[binary]==3.3.5

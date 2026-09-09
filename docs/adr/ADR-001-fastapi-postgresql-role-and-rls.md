@@ -33,3 +33,11 @@ Anonymous and ordinary `authenticated` Supabase roles have no direct grants to N
 - The design adds initial SQL/policy test effort. Required tests include cross-organization reads/writes, role-escalation attempts, background/system context, and pooled-connection context leakage.
 - A FastAPI bug can still make incorrect business decisions, so application-layer RBAC remains mandatory. RLS constrains the blast radius and provides independent tenant/role checks; it does not replace application authorization.
 - All role names, connection strings, Supabase project references, and secret stores remain exclusive to Night Club AI and must never reference La Boutique.
+
+## Prompt 4 implementation clarification — 2026-09-08
+
+Approved by the human security checkpoint. The tenant-aware policies described above remain a **target**, not an implemented security guarantee. Frozen `sql/003_rls.sql` has baseline access policies; it does not implement the transaction-context tenant isolation specified by this ADR. It has NOT been executed during Prompt 4. No RLS SQL or migration change is authorized in this stage.
+
+The effective Prompt 4 boundary is verified JWT -> immutable CurrentUser -> active Profile/Organization and exact membership -> OrganizationContext -> centralized RBAC -> scoped FastAPI repository queries. Do not describe current application access as additionally protected by organization-aware RLS.
+
+Future defense-in-depth work must explicitly review transaction-local verified user/organization/actor/correlation context, membership bootstrap reads before selecting an organization, least-privilege grants, fail-closed missing context, and pool isolation on commit/rollback/reuse. System actors require separate validated organization-scoped rules. That work requires its own approval and database tests; it is not implicitly delivered by Prompt 4. The intended production runtime role remains `nightclub_api`, never the local migration-validation role or a Supabase service-role credential.
