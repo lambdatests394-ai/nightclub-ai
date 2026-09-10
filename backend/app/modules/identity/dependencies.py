@@ -38,14 +38,21 @@ async def get_current_user(request: Request, token: str = Depends(bearer_token),
     return user
 
 
-async def get_identity_repository(_user: CurrentUser = Depends(get_current_user)) -> AsyncIterator[IdentityRepository]:
+@asynccontextmanager
+async def protected_session(user: CurrentUser):
+    """One verified root transaction; caller chooses HTTP dependency lifetime."""
     if database.SessionFactory is None:
         raise IdentityUnavailable()
     # Propagate route/service exceptions into the existing transaction boundary
     # so rollback and session close complete before leaving the dependency.
     async with asynccontextmanager(database.get_db_session)() as session:
         await verify_runtime_role(session, get_settings().database_runtime_expected_role)
-        await establish_user_context(session, _user)
+        await establish_user_context(session, user)
+        yield session
+
+
+async def get_identity_repository(_user: CurrentUser = Depends(get_current_user)) -> AsyncIterator[IdentityRepository]:
+    async with protected_session(_user) as session:
         yield SQLAlchemyIdentityRepository(session)
 
 

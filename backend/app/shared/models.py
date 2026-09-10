@@ -1,7 +1,7 @@
 """Cross-cutting idempotency persistence mapping."""
 from datetime import datetime
 from uuid import UUID
-from sqlalchemy import ForeignKey, Integer, String
+from sqlalchemy import DateTime, ForeignKey, Integer, String
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from backend.app.platform.database import Base, TimestampMixin
@@ -17,4 +17,4 @@ class IdempotencyKey(TimestampMixin, Base):
     response_status: Mapped[int | None] = mapped_column(Integer)
     response_body: Mapped[dict | None] = mapped_column(JSONB)
     state: Mapped[str] = mapped_column(String, nullable=False)
-    expires_at: Mapped[datetime] = mapped_column(nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

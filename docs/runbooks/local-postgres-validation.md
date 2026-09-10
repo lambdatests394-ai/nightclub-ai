@@ -189,3 +189,63 @@ de vida. No eliminarlo automáticamente ni como limpieza de Prompt 5. Conservar
 también `alembic_test_user` con sus atributos aprobados, sin cambios de privilegios
 ni credenciales. La limpieza de la base desechable ya fue confirmada con
 `TEST_DATABASE_REMAINING: []`; eliminar el rol no es un requisito de cierre.
+
+## Prompt 6 — harness independiente (validación real completada)
+
+Prompt 5 está cerrado. Su harness ahora fija `upgrade 20260909_0003`, nunca `head`.
+Sus expectativas históricas de tres políticas y privilegios no se cambian para
+pasar en 0004. Prompt 6 utiliza exclusivamente `nightclub_ai_prompt6_test`.
+
+Requisitos: PostgreSQL local existente, `.venv` y dependencias existentes. Usar
+los roles ya provisionados `alembic_test_user` y `nightclub_api`. No recrearlos,
+alterarlos, cambiar contraseñas, ampliar poderes ni eliminarlos.
+
+En la misma PowerShell del propietario, configurar de forma privada estas
+variables de sesión (nunca guardar valores en `.env`, archivos, chat o historial):
+
+| Variable | Destino requerido, sin mostrar credenciales |
+| --- | --- |
+| DATABASE_MIGRATION_URL | postgresql+psycopg, alembic_test_user, 127.0.0.1:5432, nightclub_ai_prompt6_test |
+| PROMPT6_RUNTIME_URL | postgresql+asyncpg, nightclub_api, 127.0.0.1:5432, nightclub_ai_prompt6_test |
+| DATABASE_RUNTIME_EXPECTED_ROLE | nightclub_api (el harness también lo fija para sus hijos) |
+
+`localhost` también está permitido, pero usar el mismo hostname explícito en
+ambas URLs. Contraseñas con caracteres reservados deben estar codificadas en la
+URL. No imprimir variables, DSNs ni errores de conexión que puedan contenerlos.
+Este proceso Codex no hereda automáticamente otra sesión PowerShell del usuario.
+
+Desde la raíz `nightclub-ai` del repositorio actual, ejecutar en esa misma sesión:
+
+```powershell
+.\.venv\Scripts\python.exe scripts/local-dev/validate_prompt6.py
+$LASTEXITCODE
+```
+
+No es necesario crear previamente la base. El harness valida los dos destinos
+antes de conectarse; rechaza bases existentes, hosts no locales, otro puerto,
+parámetros adicionales y roles inesperados. Crea solo la base indicada, aplica
+el auth_stub congelado local, migra a 0002, siembra identidad local, migra a 0003,
+captura las tres políticas, migra a `20260910_0004` y verifica que no cambiaron.
+Ejecuta la suite con `--prompt6-postgres`, verifica el downgrade bloqueado y
+repite únicamente el catálogo después del rechazo. No reintenta fallos.
+
+PASS requiere exit 0, pruebas sin fallos, `BOOTSTRAP_UNCHANGED: PASS`, 10 políticas,
+`ALEMBIC_HEAD: 20260910_0004`, pruebas de privilegios/20 FORCE/RLS, downgrade
+rechazado con su marcador exacto, `TEST_DATABASE_REMAINING: []` y los dos mensajes
+`ROLE_RETAINED_UNCHANGED`. Los 55 tests históricos opt-in se omiten aquí.
+Un fallo de comando/invariante implica detenerse y revisar, no reparar en silencio.
+
+En `finally`, cierra conexiones y elimina exclusivamente la base que creó, sin
+terminar sesiones ajenas. Si quedan sesiones, reporta limpieza bloqueada; no
+intenta borrar roles ni eliminar una base preexistente. Elimina sus variables
+de proceso; la PowerShell padre requiere limpieza independiente:
+
+```powershell
+Remove-Item Env:\DATABASE_MIGRATION_URL -ErrorAction SilentlyContinue
+Remove-Item Env:\PROMPT6_RUNTIME_URL -ErrorAction SilentlyContinue
+```
+
+En una futura repetición sin variables disponibles, ejecutar solo pruebas sin
+opt-in y reportar esa repetición como PENDING; esto no invalida el checkpoint real
+ya aprobado. No solicitar contraseñas por chat. Nunca ejecutar el SQL histórico 003,
+contactar Supabase ni reutilizar credenciales de infraestructura ajena.
