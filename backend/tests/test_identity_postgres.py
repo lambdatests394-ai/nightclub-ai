@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from backend.app.core.config import Settings
 from backend.app.main import create_app
-from backend.app.modules.identity.dependencies import get_identity_repository, get_token_verifier
+from backend.app.modules.identity.dependencies import get_identity_repository, get_identity_service, get_token_verifier
 from backend.app.modules.identity.errors import Forbidden
 from backend.app.modules.identity.models import Organization, OrganizationMember, Profile
 from backend.app.modules.identity.policy import CurrentUser, MemberRole
@@ -142,6 +142,9 @@ async def test_http_real_repository_denies_tenant_spoof_in_all_input_locations(p
     app = create_app(Settings(_env_file=None))
     app.dependency_overrides[get_token_verifier] = lambda: security_material.verifier
     app.dependency_overrides[get_identity_repository] = lambda: SQLAlchemyIdentityRepository(pg_session)
+    # Historical 0002 owner/savepoint persistence test, not runtime RLS proof.
+    # Prompt 5 tests exercise the real context-installing dependency separately.
+    app.dependency_overrides[get_identity_service] = lambda: IdentityService(SQLAlchemyIdentityRepository(pg_session))
     headers = {"Authorization": "Bearer " + security_material.token()}
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://test") as client:
         assert (await client.get("/api/v1/me", headers=headers)).json()["data"]["id"] == str(user_id)

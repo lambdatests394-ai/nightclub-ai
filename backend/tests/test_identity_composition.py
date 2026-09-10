@@ -8,6 +8,7 @@ from backend.app.core import database
 from backend.app.core.config import Settings
 from backend.app.main import create_app
 from backend.app.modules.identity.dependencies import get_identity_repository
+from backend.app.modules.identity import dependencies
 from backend.app.modules.identity.errors import Forbidden, IdentityUnavailable
 from backend.app.modules.identity.policy import CurrentUser
 
@@ -29,6 +30,8 @@ async def test_repository_dependency_preserves_exception_and_transaction_cleanup
 
     monkeypatch.setattr(database, "SessionFactory", object())
     monkeypatch.setattr(database, "get_db_session", session_boundary)
+    monkeypatch.setattr(dependencies, "verify_runtime_role", AsyncMock())
+    monkeypatch.setattr(dependencies, "establish_user_context", AsyncMock())
     dependency = get_identity_repository(CurrentUser(uuid4()))
     await anext(dependency)
     with pytest.raises(Forbidden):

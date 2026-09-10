@@ -5,6 +5,8 @@ from contextlib import asynccontextmanager
 from fastapi import Depends, Request
 
 from backend.app.core import database
+from backend.app.core.config import get_settings
+from backend.app.core.database_security import establish_user_context, verify_runtime_role
 from backend.app.modules.identity.authentication import TokenVerifier
 from backend.app.modules.identity.errors import AuthUnavailable, IdentityUnavailable, SecurityError
 from backend.app.modules.identity.policy import CurrentUser
@@ -42,8 +44,10 @@ async def get_identity_repository(_user: CurrentUser = Depends(get_current_user)
     # Propagate route/service exceptions into the existing transaction boundary
     # so rollback and session close complete before leaving the dependency.
     async with asynccontextmanager(database.get_db_session)() as session:
+        await verify_runtime_role(session, get_settings().database_runtime_expected_role)
+        await establish_user_context(session, _user)
         yield SQLAlchemyIdentityRepository(session)
 
 
 async def get_identity_service(repository: IdentityRepository = Depends(get_identity_repository)) -> IdentityService:
-    return IdentityService(repository)
+    return IdentityService(repository, organization_context_installer=repository.establish_organization_context)

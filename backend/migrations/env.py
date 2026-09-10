@@ -5,6 +5,7 @@ from alembic import context
 from sqlalchemy import engine_from_config, pool
 
 from backend.app.core.config import get_settings
+from backend.app.core.migration_config import migration_url
 from backend.app.core.database import Base
 import backend.app.platform.model_registry  # noqa: F401
 
@@ -16,17 +17,7 @@ target_metadata = Base.metadata
 
 
 def _migration_url() -> str:
-    settings = get_settings()
-    value = settings.database_migration_url or settings.database_url
-    if not value:
-        raise RuntimeError("DATABASE_MIGRATION_URL or DATABASE_URL is required for Alembic")
-    if value.startswith("postgresql+asyncpg://"):
-        return value.replace("postgresql+asyncpg://", "postgresql+psycopg://", 1)
-    if value.startswith("postgresql://"):
-        return value.replace("postgresql://", "postgresql+psycopg://", 1)
-    if value.startswith("postgres://"):
-        return value.replace("postgres://", "postgresql+psycopg://", 1)
-    return value
+    return migration_url(get_settings())
 
 
 def run_migrations_offline() -> None:
