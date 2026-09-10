@@ -394,7 +394,7 @@ def test_harness_retains_runtime_role_message_and_validation_flow(monkeypatch, c
     executed = [call.args[0][1:] for call in commands.call_args_list]
     assert executed[:3] == [
         ["-m", "alembic", "upgrade", "20260907_0002"],
-        ["-m", "alembic", "upgrade", "head"],
+        ["-m", "alembic", "upgrade", "20260909_0003"],
         ["-m", "pytest", "backend/tests", "--prompt5-postgres", "-q", "-ra"],
     ]
     if validation_fails:
