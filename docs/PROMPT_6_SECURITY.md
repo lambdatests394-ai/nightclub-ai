@@ -3,8 +3,12 @@
 Date: 2026-09-10
 
 Status: Stage B implementation and independent real local PostgreSQL validation
-passed human review. The supplied harness evidence is recorded below. No credentials
-were requested, inferred, printed or saved. No commit/push had yet occurred.
+passed human review. The implementation was committed as
+`947b8f2484483ee56cd3655e67d42f86c19cb7f4`, pushed to
+`feature/prompt-6-campaign-api`, and opened as PR #4 targeting `develop`. This
+follow-up changes documentation only; PR #4 remains unmerged pending explicit
+human authorization. No credentials were requested, inferred, printed or saved,
+and no Supabase deployment occurred.
 
 ## HTTP and identity
 

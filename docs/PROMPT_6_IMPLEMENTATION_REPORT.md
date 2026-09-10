@@ -2,6 +2,16 @@
 
 Date: 2026-09-10
 
+## Delivery status update
+
+The numbered sections below preserve the Stage B pre-commit implementation snapshot
+that was reviewed before publication. After that checkpoint, the implementation was
+committed as `947b8f2484483ee56cd3655e67d42f86c19cb7f4`, pushed to
+`feature/prompt-6-campaign-api`, and opened as PR #4 targeting `develop`. The PR
+code/security review passed; this documentation-only follow-up reconciles status
+wording. PR #4 remains unmerged pending explicit human authorization. No Supabase
+deployment occurred and Prompt 7 has not started.
+
 ## 1. Branch and baseline
 
 Active branch: `feature/prompt-6-campaign-api`.

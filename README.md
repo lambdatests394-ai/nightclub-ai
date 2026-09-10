@@ -2,10 +2,11 @@
 
 Prompts 3, 4 and 5 are closed, validated and promoted. Prompt 4 provides identity read endpoints, ES256 authentication, organization context and centralized RBAC. Prompt 5 adds identity-only PostgreSQL RLS and runtime-role enforcement. The local nightclub_api role is retained unless a future explicit lifecycle decision changes that. Meta, AI and n8n integrations are not implemented.
 
-Prompt 6 Stage B implements the campaign vertical slice on its feature branch;
-its independent real local PostgreSQL validation passed the human checkpoint.
-It is not a Supabase deployment or a closed/committed delivery. See
-[Prompt 6 security](docs/PROMPT_6_SECURITY.md) and
+Prompt 6 Stage B implements the campaign vertical slice; its independent real local
+PostgreSQL validation passed the human checkpoint. The implementation commit is
+published on `feature/prompt-6-campaign-api` and PR #4 targets `develop`. The PR
+remains unmerged pending explicit human authorization. This is not a Supabase
+deployment. See [Prompt 6 security](docs/PROMPT_6_SECURITY.md) and the
 [implementation report](docs/PROMPT_6_IMPLEMENTATION_REPORT.md).
 
 See [Prompt 4 security contract](docs/PROMPT_4_SECURITY.md) and the [local PostgreSQL validation runbook](docs/runbooks/local-postgres-validation.md). Authentication settings remain blank placeholders until the owner supplies deployment configuration. Missing trusted authentication configuration never bypasses verification.
