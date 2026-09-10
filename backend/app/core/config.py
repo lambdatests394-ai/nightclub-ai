@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     database_url: str | None = None
     database_migration_url: str | None = None
+    database_runtime_expected_role: str = Field(default="nightclub_api", pattern=r"^[a-z_][a-z0-9_]{0,62}$")
     supabase_jwt_issuer: str = ""
     supabase_jwt_audience: str = ""
     supabase_jwks_url: str = ""
