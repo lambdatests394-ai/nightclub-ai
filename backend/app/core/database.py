@@ -1,5 +1,6 @@
 """Async application database engine, session factory, and FastAPI dependency."""
 
+import asyncio
 from collections.abc import AsyncIterator
 from datetime import datetime
 
@@ -47,10 +48,39 @@ async def get_db_session() -> AsyncIterator[AsyncSession]:
 
     if SessionFactory is None:
         raise RuntimeError("DATABASE_URL is not configured")
-    async with SessionFactory() as session:
-        try:
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise
+    session = SessionFactory()
+    cancelled = False
+    try:
+        await session.begin()
+        yield session
+        await session.commit()
+    except asyncio.CancelledError:
+        cancelled = True
+        raise
+    finally:
+        # Cleanup survives cancellation, including cancellation during commit.
+        # Never return an uncertain connection to the pool.
+        async def cleanup():
+            try:
+                if cancelled:
+                    await session.invalidate()
+                else:
+                    try:
+                        await session.rollback()
+                    except BaseException:
+                        await session.invalidate()
+                        raise
+            finally:
+                session.info.pop("security_context", None)
+                await session.close()
+
+        task = asyncio.create_task(cleanup())
+        interrupted = False
+        while not task.done():
+            try:
+                await asyncio.shield(task)
+            except asyncio.CancelledError:
+                interrupted = True
+        task.result()
+        if interrupted:
+            raise asyncio.CancelledError()

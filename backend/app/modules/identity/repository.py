@@ -7,7 +7,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.modules.identity.models import Organization, OrganizationMember, Profile
-from backend.app.modules.identity.policy import MemberRole
+from backend.app.modules.identity.policy import MemberRole, OrganizationContext
+from backend.app.core.database_security import establish_organization_context
 
 
 @dataclass(frozen=True)
@@ -18,6 +19,7 @@ class Membership:
 
 
 class IdentityRepository(Protocol):
+    async def establish_organization_context(self, context: OrganizationContext) -> None: ...
     async def get_profile(self, user_id: UUID) -> Profile | None: ...
     async def get_membership(self, user_id: UUID, organization_id: UUID) -> Membership | None: ...
     async def list_memberships(self, user_id: UUID, after: UUID | None, limit: int) -> list[Membership]: ...
@@ -26,6 +28,9 @@ class IdentityRepository(Protocol):
 class SQLAlchemyIdentityRepository:
     def __init__(self, session: AsyncSession) -> None:
         self._session = session
+
+    async def establish_organization_context(self, context: OrganizationContext) -> None:
+        await establish_organization_context(self._session, context)
 
     async def get_profile(self, user_id: UUID) -> Profile | None:
         return await self._session.scalar(select(Profile).where(Profile.id == user_id))

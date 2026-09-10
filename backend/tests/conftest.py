@@ -14,6 +14,8 @@ from backend.app.modules.identity.jwks import JWKSCache
 
 
 def pytest_addoption(parser):
+    parser.addoption("--prompt5-postgres", action="store_true", default=False,
+                     help="Run RLS tests only on nightclub_ai_prompt5_test with a disposable runtime login")
     parser.addoption("--local-postgres", action="store_true", default=False,
                      help="Run opted-in tests only on nightclub_ai_prompt4_test at loopback")
 

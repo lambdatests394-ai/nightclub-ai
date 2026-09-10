@@ -1,6 +1,7 @@
 """Application identity and validated organization context; no token handling."""
 import base64
 import binascii
+from collections.abc import Awaitable, Callable
 from uuid import UUID
 
 from backend.app.modules.identity.errors import Forbidden, InvalidCursor
@@ -28,8 +29,10 @@ def decode_cursor(value: str | None) -> UUID | None:
 
 
 class IdentityService:
-    def __init__(self, repository: IdentityRepository) -> None:
+    def __init__(self, repository: IdentityRepository, *,
+                 organization_context_installer: Callable[[OrganizationContext], Awaitable[None]] | None = None) -> None:
         self._repository = repository
+        self._organization_context_installer = organization_context_installer
 
     async def active_profile(self, user: CurrentUser) -> Profile:
         profile = await self._repository.get_profile(user.user_id)
@@ -62,6 +65,8 @@ class IdentityService:
             raise Forbidden()
         context = self._context(user, membership, organization_id)
         require_permission(context, Permission.ORGANIZATION_READ)
+        if self._organization_context_installer is not None:
+            await self._organization_context_installer(context)
         return context, membership.organization
 
     async def organizations(self, user: CurrentUser, cursor: str | None, limit: int) -> tuple[list[Membership], str | None]:

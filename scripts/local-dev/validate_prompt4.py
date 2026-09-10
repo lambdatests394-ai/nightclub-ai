@@ -43,7 +43,9 @@ def run() -> None:
             print("APPLY LOCAL auth_stub.sql: OK", flush=True)
             child_env = os.environ.copy()
             child_env.pop("DATABASE_URL", None)
-            for args in (["-m", "alembic", "upgrade", "head"],
+            # Historical owner-based persistence tests must not pretend to test
+            # 0003's non-owner RLS boundary. Prompt 5 has a separate harness.
+            for args in (["-m", "alembic", "upgrade", "20260907_0002"],
                          ["-m", "pytest", "backend/tests", "--local-postgres", "-q"]):
                 print("RUN:", sys.executable, *args, flush=True)
                 subprocess.run([sys.executable, *args], cwd=ROOT, env=child_env, check=True)

@@ -1,8 +1,10 @@
 # NIGHT CLUB AI v1.0
 
-Prompt 3 provides the validated database/domain baseline. Prompt 4 Stage B adds the approved identity read endpoints, ES256 authentication, organization context and centralized RBAC; it awaits human review and has not been committed. Meta, AI and n8n integrations are not implemented.
+Prompts 3 and 4 are closed and validated. Prompt 4 provides identity read endpoints, ES256 authentication, organization context and centralized RBAC. Prompt 5 Stage B adds identity-only PostgreSQL RLS and runtime-role enforcement; its implementation and real local PostgreSQL RLS validation have passed human review. Commit authorization remains separate. The local nightclub_api role is retained unless a future explicit lifecycle decision changes that. Meta, AI and n8n integrations are not implemented.
 
 See [Prompt 4 security contract](docs/PROMPT_4_SECURITY.md) and the [local PostgreSQL validation runbook](docs/runbooks/local-postgres-validation.md). Authentication settings remain blank placeholders until the owner supplies deployment configuration. Missing trusted authentication configuration never bypasses verification.
+
+See [Prompt 5 security](docs/PROMPT_5_SECURITY.md). Runtime uses `DATABASE_URL` and checks `DATABASE_RUNTIME_EXPECTED_ROLE` (default `nightclub_api`). Alembic requires a separate `DATABASE_MIGRATION_URL`; it never falls back to the runtime URL. Historical `sql/003_rls.sql` is design-only and MUST NOT be executed.
 
 Run locally after installing dependencies:
 
