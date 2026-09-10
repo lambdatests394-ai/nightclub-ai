@@ -1,6 +1,6 @@
 """Immutable, redacted audit persistence mapping."""
 from uuid import UUID
-from sqlalchemy import BigInteger, ForeignKey, String, Text
+from sqlalchemy import BigInteger, ForeignKey, Identity, String, Text
 from sqlalchemy.dialects.postgresql import INET, JSONB, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from backend.app.platform.database import Base, TimestampMixin
@@ -8,7 +8,7 @@ from backend.app.platform.database import Base, TimestampMixin
 
 class AuditLog(TimestampMixin, Base):
     __tablename__ = "audit_logs"
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(BigInteger, Identity(always=True), primary_key=True)
     organization_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="RESTRICT"))
     actor_type: Mapped[str] = mapped_column(String, nullable=False)
     actor_id: Mapped[str | None] = mapped_column(Text)

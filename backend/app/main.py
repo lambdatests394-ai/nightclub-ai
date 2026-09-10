@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
 
 from backend.app.api.v1.identity import router
+from backend.app.api.v1.campaigns import router as campaigns_router
 from backend.app.core.config import Settings, get_settings
 from backend.app.modules.identity.authentication import SupabaseJWTVerifier
 from backend.app.modules.identity.errors import IdentityUnavailable, SecurityError
@@ -100,6 +101,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {"status": "ready", "checks": {"application": "ok"}}
 
     application.include_router(router)
+    application.include_router(campaigns_router)
     return application
 
 

@@ -109,7 +109,7 @@ def run():
             command("-m", "alembic", "upgrade", "20260907_0002")
             with psycopg.connect(connection_info(migration)) as connection:
                 seed(connection)
-            command("-m", "alembic", "upgrade", "head")
+            command("-m", "alembic", "upgrade", "20260909_0003")
             with psycopg.connect(connection_info(migration)) as connection:
                 if connection.execute("SELECT count(*) FROM public.profiles").fetchone() != (0,):
                     raise RuntimeError("FORCE owner isolation failed")

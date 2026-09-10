@@ -18,6 +18,9 @@ class MemberRole(StrEnum):
 
 class Permission(StrEnum):
     ORGANIZATION_READ = "organization:read"
+    CAMPAIGN_READ = "campaign:read"
+    CAMPAIGN_WRITE = "campaign:write"
+    CAMPAIGN_ARCHIVE = "campaign:archive"
 
 
 @dataclass(frozen=True)
@@ -33,12 +36,12 @@ class OrganizationContext:
 
 
 ROLE_POLICY = MappingProxyType({
-    MemberRole.OWNER: frozenset({Permission.ORGANIZATION_READ}),
-    MemberRole.MANAGER: frozenset({Permission.ORGANIZATION_READ}),
-    MemberRole.EDITOR: frozenset({Permission.ORGANIZATION_READ}),
-    MemberRole.REVIEWER: frozenset({Permission.ORGANIZATION_READ}),
-    MemberRole.OPERATOR: frozenset({Permission.ORGANIZATION_READ}),
-    MemberRole.VIEWER: frozenset({Permission.ORGANIZATION_READ}),
+    MemberRole.OWNER: frozenset({Permission.ORGANIZATION_READ, Permission.CAMPAIGN_READ, Permission.CAMPAIGN_WRITE, Permission.CAMPAIGN_ARCHIVE}),
+    MemberRole.MANAGER: frozenset({Permission.ORGANIZATION_READ, Permission.CAMPAIGN_READ, Permission.CAMPAIGN_WRITE, Permission.CAMPAIGN_ARCHIVE}),
+    MemberRole.EDITOR: frozenset({Permission.ORGANIZATION_READ, Permission.CAMPAIGN_READ, Permission.CAMPAIGN_WRITE}),
+    MemberRole.REVIEWER: frozenset({Permission.ORGANIZATION_READ, Permission.CAMPAIGN_READ}),
+    MemberRole.OPERATOR: frozenset({Permission.ORGANIZATION_READ, Permission.CAMPAIGN_READ}),
+    MemberRole.VIEWER: frozenset({Permission.ORGANIZATION_READ, Permission.CAMPAIGN_READ}),
 })
 
 
