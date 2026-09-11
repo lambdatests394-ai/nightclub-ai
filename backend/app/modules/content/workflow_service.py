@@ -15,24 +15,22 @@ class ContentUnitOfWork(Protocol):
     async def add_review_decision(self, decision: ReviewDecision) -> None: ...
     async def add_publication_job(self, job: PublicationJob) -> None: ...
     async def save_content_state(self, content: ContentState) -> None: ...
-    async def commit(self) -> None: ...
 
 
 class ContentWorkflowService:
-    """Guarantee state and required child records share one unit of work."""
+    """Persist child/state effects; the outer protected request owns commit."""
 
     def __init__(self, unit_of_work: ContentUnitOfWork) -> None:
         self._uow = unit_of_work
 
-    async def review(self, content: ContentState, *, content_version_id: UUID, decision: str, decided_by: UUID, decided_at: datetime, comment: str | None = None) -> ReviewDecision:
-        effect = await ContentStateMachine.review(content, decision=decision, decided_by=decided_by, comment=comment)
+    async def review(self, content: ContentState, *, content_version_id: UUID, decision: str, decided_by: UUID, decided_at: datetime, comment: str | None = None, reviewer_role: str | None = None) -> ReviewDecision:
+        effect = await ContentStateMachine.review(content, decision=decision, decided_by=decided_by, comment=comment, reviewer_role=reviewer_role)
         record = ReviewDecision(
             id=uuid4(), content_item_id=content.content_id, content_version_id=content_version_id,
             decision=effect.decision, comment=effect.comment, decided_by=effect.decided_by, decided_at=decided_at,
         )
         await self._uow.add_review_decision(record)
         await self._uow.save_content_state(content)
-        await self._uow.commit()
         return record
 
     async def edit(self, content: ContentState, *, body: str, created_by: UUID, source: str = "manual", title: str | None = None, link_url: str | None = None) -> ContentVersion:
@@ -43,7 +41,6 @@ class ContentWorkflowService:
         )
         await self._uow.add_content_version(version)
         await self._uow.save_content_state(content)
-        await self._uow.commit()
         return version
 
     async def schedule(self, content: ContentState, *, content_version_id: UUID, scheduled_for: datetime, scheduled_by: UUID, idempotency_key: UUID) -> PublicationJob:
@@ -55,5 +52,4 @@ class ContentWorkflowService:
         )
         await self._uow.add_publication_job(job)
         await self._uow.save_content_state(content)
-        await self._uow.commit()
         return job
