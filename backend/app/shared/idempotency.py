@@ -13,7 +13,7 @@ from uuid import UUID
 from sqlalchemy import select, text, update
 from sqlalchemy.dialects.postgresql import insert
 
-from backend.app.modules.campaigns.errors import IdempotencyConflict
+from backend.app.shared.errors import IdempotencyConflict
 from backend.app.modules.identity.errors import IdentityUnavailable
 from backend.app.shared.models import IdempotencyKey
 

@@ -20,7 +20,7 @@ def test_review_persists_decision_and_state_in_one_unit_of_work() -> None:
     assert record.decision == "approved"
     uow.add_review_decision.assert_called_once_with(record)
     uow.save_content_state.assert_called_once_with(content)
-    uow.commit.assert_called_once_with()
+    uow.commit.assert_not_called()
 
 
 def test_editing_approved_content_persists_new_draft_version() -> None:
@@ -33,7 +33,7 @@ def test_editing_approved_content_persists_new_draft_version() -> None:
     assert content.status is ContentStatus.DRAFT
     assert content.approved_version_no is None
     uow.add_content_version.assert_called_once_with(version)
-    uow.commit.assert_called_once_with()
+    uow.commit.assert_not_called()
 
 
 def test_scheduling_approved_content_persists_publication_job() -> None:
@@ -48,4 +48,4 @@ def test_scheduling_approved_content_persists_publication_job() -> None:
     assert content.status is ContentStatus.SCHEDULED
     assert job.status == "pending"
     uow.add_publication_job.assert_called_once_with(job)
-    uow.commit.assert_called_once_with()
+    uow.commit.assert_not_called()

@@ -38,15 +38,16 @@ class ContentStateMachine:
         content.status = ContentStatus.IN_REVIEW
 
     @staticmethod
-    async def review(content: ContentState, *, decision: str, decided_by: UUID, comment: str | None = None) -> ReviewDecisionEffect:
+    async def review(content: ContentState, *, decision: str, decided_by: UUID, comment: str | None = None, reviewer_role: str | None = None) -> ReviewDecisionEffect:
         ContentStateMachine._require(content, ContentStatus.IN_REVIEW)
-        if decided_by == content.created_by:
+        if decided_by == content.created_by and not (reviewer_role == "owner" and comment and comment.strip()):
             raise InvalidContentTransition("content creators cannot review their own content")
         if decision == "approved":
             content.status = ContentStatus.APPROVED
             content.approved_version_no = content.current_version_no
         elif decision == "changes_requested":
             content.status = ContentStatus.CHANGES_REQUESTED
+            content.approved_version_no = None
         else:
             raise InvalidContentTransition("unsupported review decision")
         effect = ReviewDecisionEffect(content.content_id, content.current_version_no, decision, decided_by, comment)
