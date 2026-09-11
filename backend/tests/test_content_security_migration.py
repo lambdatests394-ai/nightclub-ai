@@ -51,6 +51,16 @@ def test_narrow_policy_column_scope(migration):
         if command in {"INSERT","UPDATE"}:assert check
 
 
+def test_content_update_check_restricts_exact_prompt7_resulting_states(migration):
+    table, command, using, check = migration.POLICIES["content_items_business_update"]
+    assert (table, command, using) == ("content_items", "UPDATE", migration.TENANT)
+    expected = migration.TENANT + " AND status IN ('draft', 'in_review', 'changes_requested', 'approved')"
+    # Check the actual policy expression, not merely a detached allowlist constant.
+    assert " ".join(check.split()) == " ".join(expected.split())
+    for forbidden in ("scheduled", "publishing", "published", "failed", "cancelled"):
+        assert f"'{forbidden}'" not in check
+
+
 def test_catalog_normalization_preserves_different_authority(migration):
     expression="action IN ('campaign.created', 'campaign.updated', 'campaign.archived')"
     postgres="(action = ANY (ARRAY['campaign.created'::text, 'campaign.updated'::text, 'campaign.archived'::text]))"

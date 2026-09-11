@@ -137,6 +137,25 @@ async def test_forbidden_direct_runtime_operations(runtime,query):
     assert error.value.orig.sqlstate=="42501"
 
 
+@pytest.mark.parametrize("status", ["scheduled", "publishing", "published", "failed", "cancelled"])
+async def test_direct_runtime_update_forbidden_status_rejected_by_rls(runtime, status):
+    content_id = UUID((await create(runtime))[1]["id"])
+    with pytest.raises(DBAPIError) as error:
+        async with business(runtime) as (_, session):
+            assert await session.scalar(text("SELECT current_user")) == "nightclub_api"
+            # A visible same-tenant row and a granted column: rejection must be RLS,
+            # not application lifecycle validation, a missing row or a column grant.
+            assert await session.scalar(select(ContentItem.status).where(ContentItem.id == content_id)) == "draft"
+            await session.execute(text(
+                "UPDATE public.content_items SET status = CAST(:status AS public.content_status) "
+                "WHERE id = :content_id"
+            ), {"status": status, "content_id": content_id})
+    assert error.value.orig.sqlstate == "42501"
+    # The failed root transaction has rolled back; inspect through a fresh one.
+    async with business(runtime) as (_, session):
+        assert await session.scalar(select(ContentItem.status).where(ContentItem.id == content_id)) == "draft"
+
+
 @pytest.mark.parametrize("table",["assets","content_assets","publication_jobs","publication_attempts","ai_generation_requests","webhook_events","whatsapp_conversations","whatsapp_messages","outbox_events","automation_runs"])
 async def test_unrelated_tables_stay_closed(runtime,table):
     with pytest.raises(DBAPIError) as error:

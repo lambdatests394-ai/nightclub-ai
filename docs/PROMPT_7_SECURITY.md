@@ -33,7 +33,7 @@ closed. Child policies traverse RLS-protected parents, not privileged helpers.
 | --- | --- | --- | --- |
 | `content_items_business_select` | content_items | SELECT | USING TENANT |
 | `content_items_business_insert` | content_items | INSERT | WITH CHECK TENANT and constrained creation fields below |
-| `content_items_business_update` | content_items | UPDATE | USING TENANT and WITH CHECK TENANT |
+| `content_items_business_update` | content_items | UPDATE | USING TENANT; WITH CHECK TENANT AND status IN ('draft', 'in_review', 'changes_requested', 'approved') |
 | `content_versions_business_select` | content_versions | SELECT | USING an accessible content_items parent in the selected organization |
 | `content_versions_business_insert` | content_versions | INSERT | WITH CHECK the same parent, created_by = app.user_id, source = manual, ai_generation_id IS NULL |
 | `review_decisions_business_insert` | review_decisions | INSERT | WITH CHECK a same-tenant content parent joined to the referenced content_version, decided_by = app.user_id |
@@ -46,6 +46,13 @@ published_at, external_post_id, last_error_code, last_error_message. An optional
 campaign must exist in the selected organization. Archive status and active,
 platform-matching connection checks are enforced by the application; they are
 not additional predicates silently claimed for this INSERT policy.
+
+PR #6 correction: the UPDATE policy restricts the resulting row to the four
+Prompt 7 states above. Direct runtime SQL cannot update content_items into
+scheduled, publishing, published, failed or cancelled. USING remains tenant-only;
+this does not independently enforce full lifecycle transition sequencing, which
+remains FastAPI's responsibility. No grants, other policies or role properties
+are changed by this correction.
 
 ## Exact new privileges
 
@@ -150,11 +157,21 @@ environment variables, whose cleanup remains the operator's responsibility.
 
 The project-owner checkpoint reports **518 passed, 103 skipped, 1 warning**, exit
 0, head 20260910_0005, 18 policies, successful cleanup and unchanged retained roles.
-This finalization preserves that validated implementation and does not rerun
-PostgreSQL. `test_content_security_migration.py` covers static guards and scope;
+That checkpoint predates the PR #6 UPDATE-state restriction and is not sufficient
+to validate the corrected migration. REAL POSTGRESQL REVALIDATION IS REQUIRED
+through the unchanged `scripts/local-dev/validate_prompt7.py`; connection variables
+are absent from the corrective agent process. No new PostgreSQL PASS is claimed.
+`test_content_security_migration.py` covers static guards and scope, including
+exact equality of the UPDATE WITH CHECK to TENANT plus the four allowed states;
 `test_content_api.py` covers unit/ASGI contracts. Real catalog, denied operations,
 cross-tenant/actor collisions, rollback, concurrency and context reuse are in
 `test_content_postgres.py`. Static tests alone are not claimed as RLS execution.
+
+The new `test_direct_runtime_update_forbidden_status_rejected_by_rls` has five
+cases (scheduled, publishing, published, failed, cancelled). It uses direct SQL
+as nightclub_api in a valid tenant transaction, expects SQLSTATE 42501 and a
+row-level security policy error, then verifies draft status in a fresh transaction.
+These real PostgreSQL cases are written but await the revalidation checkpoint.
 
 Audit/review append counts are observed SQL INSERTs paired with root commit, not
 privileged audit readback. No remote security certification or production-ready

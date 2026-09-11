@@ -46,7 +46,8 @@ POLICIES = {
         AND external_post_id IS NULL AND last_error_code IS NULL AND last_error_message IS NULL
         AND (campaign_id IS NULL OR EXISTS (SELECT 1 FROM public.campaigns c
             WHERE c.id = content_items.campaign_id AND c.organization_id = {ORG}))"""),
-    "content_items_business_update": ("content_items", "UPDATE", TENANT, TENANT),
+    "content_items_business_update": ("content_items", "UPDATE", TENANT,
+        f"{TENANT} AND status IN ('draft', 'in_review', 'changes_requested', 'approved')"),
     "content_versions_business_select": ("content_versions", "SELECT", VERSION_TENANT, None),
     "content_versions_business_insert": ("content_versions", "INSERT", None, f"{VERSION_TENANT} AND created_by = {USER} AND source = 'manual' AND ai_generation_id IS NULL"),
     "review_decisions_business_insert": ("review_decisions", "INSERT", None, f"{REVIEW_TENANT} AND decided_by = {USER}"),
