@@ -155,25 +155,31 @@ environment variables, whose cleanup remains the operator's responsibility.
 
 ## Evidence and remaining boundaries
 
-The project-owner checkpoint reports **518 passed, 103 skipped, 1 warning**, exit
-0, head 20260910_0005, 18 policies, successful cleanup and unchanged retained roles.
-That checkpoint predates the PR #6 UPDATE-state restriction and is not sufficient
-to validate the corrected migration. REAL POSTGRESQL REVALIDATION IS REQUIRED
-through the unchanged `scripts/local-dev/validate_prompt7.py`; connection variables
-are absent from the corrective agent process. No new PostgreSQL PASS is claimed.
+The earlier project-owner checkpoint reported **518 passed, 103 skipped, 1 warning**,
+exit 0, head 20260910_0005, 18 policies, successful cleanup and unchanged retained
+roles. That count is retained as historical pre-correction evidence.
+
+After the PR #6 UPDATE-state correction, the project owner reran the real local
+PostgreSQL harness successfully (`$LASTEXITCODE = 0`). Corrective PostgreSQL
+revalidation is **COMPLETE / PASS**. Alembic head remained `20260910_0005`, the
+Prompt 5/6 policies remained preserved, the disposable database was cleaned up,
+and `nightclub_api` plus `alembic_test_user` remained unchanged. No exact pytest
+total is claimed for this rerun because the final checkpoint did not supply one.
+
 `test_content_security_migration.py` covers static guards and scope, including
 exact equality of the UPDATE WITH CHECK to TENANT plus the four allowed states;
 `test_content_api.py` covers unit/ASGI contracts. Real catalog, denied operations,
 cross-tenant/actor collisions, rollback, concurrency and context reuse are in
 `test_content_postgres.py`. Static tests alone are not claimed as RLS execution.
 
-The new `test_direct_runtime_update_forbidden_status_rejected_by_rls` has five
-cases (scheduled, publishing, published, failed, cancelled). It uses direct SQL
-as nightclub_api in a valid tenant transaction, expects SQLSTATE 42501 and a
-row-level security policy error, then verifies draft status in a fresh transaction.
-These real PostgreSQL cases are written but await the revalidation checkpoint.
+`test_direct_runtime_update_forbidden_status_rejected_by_rls` executed five cases:
+scheduled, publishing, published, failed and cancelled. Each used direct SQL
+through `nightclub_api` against a visible same-tenant content row, was rejected
+with SQLSTATE 42501, and verified draft status in a fresh transaction after
+rollback. The assertion is locale-independent and does not inspect localized
+PostgreSQL error-message text.
 
 Audit/review append counts are observed SQL INSERTs paired with root commit, not
 privileged audit readback. No remote security certification or production-ready
 claim is made. Supabase, Meta, n8n and Railway were not contacted; no application
-deployment, Git publication or subsequent-stage implementation is included.
+deployment or subsequent-stage implementation is included.

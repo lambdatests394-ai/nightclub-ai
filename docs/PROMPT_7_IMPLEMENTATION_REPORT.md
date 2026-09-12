@@ -2,11 +2,14 @@
 
 Date: 2026-09-11
 
-## PR #6 corrective checkpoint — PostgreSQL revalidation required
+## PR #6 corrective checkpoint — PostgreSQL revalidation passed
 
-Correction starting HEAD: `3d8e9d7590edcaa000263257d3b215c9c2a705d6`, on
-`feature/prompt-7-content-workflow`. The original finalization evidence and
-inventory below are historical, not the status of this corrective working tree.
+The final corrective commit before this documentation sync is
+`51a9d106bf0f65699fb809deb6a4eeecb44ad563` on
+`feature/prompt-7-content-workflow`. The project owner reran the real local
+PostgreSQL harness after the security correction; it completed successfully with
+`$LASTEXITCODE = 0`. No exact pytest total is attributed to that rerun because
+none was supplied in the final checkpoint evidence.
 
 Migration 0005 retains revision `20260910_0005` and parent `20260910_0004`.
 Its content_items UPDATE USING stays TENANT; WITH CHECK now additionally requires
@@ -16,28 +19,29 @@ FastAPI still owns valid transition sequencing. Grants and all other application
 behavior remain unchanged.
 
 An exact-expression static guard detects removal or expansion of that restriction.
-Five new real PostgreSQL cases exercise direct same-tenant UPDATE as nightclub_api,
-require an RLS error, and verify the row remains draft after rollback.
+Five real PostgreSQL cases exercised direct UPDATE through `nightclub_api` against
+a visible same-tenant content row for scheduled, publishing, published, failed
+and cancelled. Every attempt was rejected with SQLSTATE 42501, independently of
+localized PostgreSQL error text, and the row was verified to remain draft after
+rollback.
 
-The prior 518-pass PostgreSQL checkpoint does not validate this changed migration.
-REAL POSTGRESQL REVALIDATION IS REQUIRED through `scripts/local-dev/validate_prompt7.py`.
-DATABASE_MIGRATION_URL and PROMPT7_RUNTIME_URL are unavailable in this process;
-the new PostgreSQL cases remain unexecuted here. No role or credential changes
-are needed or performed. No staging, commit or remote action is authorized by
-this correction. Non-PostgreSQL corrective results are reported separately.
+Corrective PostgreSQL revalidation is **COMPLETE / PASS**. Alembic head remained
+`20260910_0005`; prior Prompt 5/6 policies remained preserved. The disposable
+database was cleaned up, and retained local roles `nightclub_api` and
+`alembic_test_user` remained unchanged. No Supabase, Meta, n8n or Railway access
+occurred.
 
 ## Baseline and evidence provenance
 
 Branch: `feature/prompt-7-content-workflow`.
-Original baseline and uncommitted HEAD: `418dfff16c342eca4c9b67ae5282d826ab90a097`.
+Original implementation baseline: `418dfff16c342eca4c9b67ae5282d826ab90a097`.
 
 The project owner supplied the successful real local PostgreSQL checkpoint:
 `518 passed, 103 skipped, 1 warning`, harness exit code `0`. This report records
 that accepted evidence, not a new PostgreSQL execution during finalization.
-Finalization adds only this report and `PROMPT_7_SECURITY.md`; the validated
-implementation, migration, PostgreSQL tests and harness are preserved.
-Commit authorization remains a separate human checkpoint. No commit, push, PR,
-merge, tag, deployment or remote Supabase application is claimed.
+That result is historical evidence from before the PR #6 UPDATE-state correction.
+The later corrective revalidation is recorded above from its separate successful
+harness exit. No deployment or remote Supabase application is claimed.
 
 ## HTTP contract
 
