@@ -21,6 +21,9 @@ class Permission(StrEnum):
     CAMPAIGN_READ = "campaign:read"
     CAMPAIGN_WRITE = "campaign:write"
     CAMPAIGN_ARCHIVE = "campaign:archive"
+    CONTENT_READ = "content:read"
+    CONTENT_WRITE = "content:write"
+    CONTENT_REVIEW = "content:review"
 
 
 @dataclass(frozen=True)
@@ -36,12 +39,12 @@ class OrganizationContext:
 
 
 ROLE_POLICY = MappingProxyType({
-    MemberRole.OWNER: frozenset({Permission.ORGANIZATION_READ, Permission.CAMPAIGN_READ, Permission.CAMPAIGN_WRITE, Permission.CAMPAIGN_ARCHIVE}),
-    MemberRole.MANAGER: frozenset({Permission.ORGANIZATION_READ, Permission.CAMPAIGN_READ, Permission.CAMPAIGN_WRITE, Permission.CAMPAIGN_ARCHIVE}),
-    MemberRole.EDITOR: frozenset({Permission.ORGANIZATION_READ, Permission.CAMPAIGN_READ, Permission.CAMPAIGN_WRITE}),
-    MemberRole.REVIEWER: frozenset({Permission.ORGANIZATION_READ, Permission.CAMPAIGN_READ}),
-    MemberRole.OPERATOR: frozenset({Permission.ORGANIZATION_READ, Permission.CAMPAIGN_READ}),
-    MemberRole.VIEWER: frozenset({Permission.ORGANIZATION_READ, Permission.CAMPAIGN_READ}),
+    MemberRole.OWNER: frozenset({Permission.ORGANIZATION_READ, Permission.CAMPAIGN_READ, Permission.CAMPAIGN_WRITE, Permission.CAMPAIGN_ARCHIVE, Permission.CONTENT_READ, Permission.CONTENT_WRITE, Permission.CONTENT_REVIEW}),
+    MemberRole.MANAGER: frozenset({Permission.ORGANIZATION_READ, Permission.CAMPAIGN_READ, Permission.CAMPAIGN_WRITE, Permission.CAMPAIGN_ARCHIVE, Permission.CONTENT_READ, Permission.CONTENT_WRITE, Permission.CONTENT_REVIEW}),
+    MemberRole.EDITOR: frozenset({Permission.ORGANIZATION_READ, Permission.CAMPAIGN_READ, Permission.CAMPAIGN_WRITE, Permission.CONTENT_READ, Permission.CONTENT_WRITE}),
+    MemberRole.REVIEWER: frozenset({Permission.ORGANIZATION_READ, Permission.CAMPAIGN_READ, Permission.CONTENT_READ, Permission.CONTENT_REVIEW}),
+    MemberRole.OPERATOR: frozenset({Permission.ORGANIZATION_READ, Permission.CAMPAIGN_READ, Permission.CONTENT_READ}),
+    MemberRole.VIEWER: frozenset({Permission.ORGANIZATION_READ, Permission.CAMPAIGN_READ, Permission.CONTENT_READ}),
 })
 
 
