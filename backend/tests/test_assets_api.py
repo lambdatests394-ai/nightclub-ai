@@ -14,7 +14,7 @@ from backend.app.modules.assets import dependencies
 from backend.app.modules.assets.dependencies import get_asset_coordinator
 from backend.app.modules.assets.filenames import sanitize_filename
 from backend.app.modules.assets.schemas import UploadIntent
-from backend.app.modules.assets.storage import StorageUnavailable, StorageInvalidResponse
+from backend.app.modules.assets.storage import StorageInvalidResponse, StorageMissing, StorageUnavailable
 from backend.app.modules.identity.dependencies import get_current_user
 from backend.app.modules.identity import dependencies as identity_dependencies
 from backend.app.modules.identity.errors import Forbidden
@@ -114,16 +114,21 @@ async def test_complete_no_body_and_no_unapproved_routes():
         assert (await client.delete(f"/api/v1/assets/{uuid4()}")).status_code == 404
 
 
-@pytest.mark.parametrize("error,status", [(StorageUnavailable,503),(StorageInvalidResponse,502)])
+@pytest.mark.parametrize("error,status", [(StorageUnavailable,503),(StorageInvalidResponse,502),(StorageMissing,409)])
 async def test_storage_http_errors_and_retry_after(error,status):
     case = AssetFixture(); asset_id = UUID((await case.coordinator.upload(uuid4(),intent()))[1]["asset"]["id"])
+    completion_key = uuid4()
     case.provider.error = error
     app = create_app(); app.dependency_overrides[get_asset_coordinator] = lambda: case.coordinator
     async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://local.test") as client:
-        response = await client.post(f"/api/v1/assets/{asset_id}/complete",headers={"Idempotency-Key":str(uuid4())})
+        response = await client.post(f"/api/v1/assets/{asset_id}/complete",headers={"Idempotency-Key":str(completion_key)})
     assert response.status_code == status
     assert response.headers.get("Retry-After") == ("30" if status==503 else None)
     assert "synthetic" not in response.text
+    if error is StorageMissing:
+        assert case.repository.rows[asset_id].status == "pending"
+        assert completion_key not in case.idempotency.rows
+        assert case.audit.write.await_count == 1
 
 
 @pytest.mark.parametrize("fails", [False, True])

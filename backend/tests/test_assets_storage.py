@@ -91,6 +91,21 @@ async def test_stat_and_original_byte_stream_use_only_canonical_authenticated_pa
     assert len(calls)==2
 
 
+@pytest.mark.parametrize("status", [400, 404])
+async def test_stat_missing_canonical_head_is_storage_missing(status):
+    calls = []
+    def handler(request):
+        calls.append(request)
+        assert request.method == "HEAD"
+        assert request.url.path == f"/storage/v1/object/authenticated/{BUCKET}/{KEY}"
+        return httpx.Response(status, content=b"")
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler), follow_redirects=True) as client:
+        with pytest.raises(StorageMissing) as error:
+            await SupabaseStorage(SETTINGS, client).stat_object(BUCKET, KEY)
+    assert len(calls) == 1
+    assert str(error.value) == ""
+
+
 @pytest.mark.parametrize("body", [b"not json",b"[]",b"x"*70_000], ids=["malformed", "array", "oversized"])
 async def test_unexpected_json_is_protocol_error(body):
     async with httpx.AsyncClient(transport=httpx.MockTransport(lambda r:httpx.Response(200,content=body))) as client:

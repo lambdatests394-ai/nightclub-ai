@@ -116,6 +116,10 @@ class SupabaseStorage:
         try:
             response = await self._client.head(self._target(bucket, key, "object/authenticated"),
                 headers=self._headers(), timeout=self._settings.asset_verification_timeout_seconds, follow_redirects=False)
+            # Supabase Storage may report a missing canonical object as either
+            # 400 or 404 for HEAD, without a useful response body.
+            if response.status_code in {400, 404}:
+                raise StorageMissing()
             self._status(response)
             raw = response.headers.get("content-length")
             if raw is not None and (not raw.isascii() or not raw.isdecimal()):
