@@ -1,4 +1,4 @@
-"""Prompt 7 only: drafts, immutable versions and human review."""
+"""Drafts, immutable versions and human review with ordered asset snapshots."""
 from datetime import UTC, datetime
 from uuid import uuid4
 
@@ -18,7 +18,7 @@ class ContentService:
         self.context, self.repository, self.idempotency, self.audit = context, repository, idempotency, audit
 
     @staticmethod
-    def serialize(row):
+    def serialize(row, asset_ids=()):
         item, version = row
         return ContentCurrentRead(
             id=item.id, campaign_id=item.campaign_id, connection_id=item.connection_id,
@@ -26,6 +26,7 @@ class ContentService:
             approved_version_no=item.approved_version_no, body=version.body, title=version.title,
             link_url=version.link_url, created_by=item.created_by,
             created_at=item.created_at, updated_at=item.updated_at,
+            asset_ids=list(asset_ids),
         ).model_dump(mode="json", by_alias=True)
 
     async def read(self, content_id):
@@ -33,7 +34,7 @@ class ContentService:
         row = await self.repository.current(content_id)
         if row is None:
             raise ContentNotFound()
-        return self.serialize(row)
+        return self.serialize(row, await self.repository.asset_ids(row[1].id))
 
     async def page(self, cursor, limit):
         require_permission(self.context, Permission.CONTENT_READ)
@@ -41,7 +42,7 @@ class ContentService:
             raise InvalidContentRequest()
         rows = await self.repository.page(decode_cursor(cursor), limit + 1)
         page = rows[:limit]
-        return [self.serialize(row) for row in page], encode_cursor(page[-1][0].id) if len(rows) > limit else None
+        return [self.serialize(row, await self.repository.asset_ids(row[1].id)) for row in page], encode_cursor(page[-1][0].id) if len(rows) > limit else None
 
     async def check_campaign(self, campaign_id):
         if campaign_id is not None:
@@ -58,6 +59,12 @@ class ContentService:
         operation = f"content:{action}:{content_id or 'collection'}"
         semantic = {"organization": str(self.context.organization_id), "actor": str(self.context.user_id),
                     "payload": {k: str(v) if k in {"campaign_id", "connection_id"} and v is not None else v for k, v in payload.items()}}
+        if "asset_ids" in semantic["payload"]:
+            semantic["payload"]["asset_ids"] = [str(value) for value in payload["asset_ids"]]
+            if action == "create" and not payload["asset_ids"]:
+                # Keep Prompt 7's fingerprint for an omitted/empty attachment list.
+                # Its durable replay body is returned untouched, even without assetIds.
+                semantic["payload"].pop("asset_ids")
         replay = await self.idempotency.claim(key, operation, fingerprint(operation, semantic))
         if replay is not None:
             return replay
@@ -74,12 +81,17 @@ class ContentService:
                 await self.repository.create_item(content_id=content_id, actor_id=self.context.user_id,
                     campaign_id=payload["campaign_id"], platform=payload["platform"], connection_id=payload["connection_id"])
                 state = ContentState(content_id, self.context.user_id)
-                await self.repository.add_content_version(ContentVersion(
+                version = ContentVersion(
                     id=uuid4(), content_item_id=content_id, version_no=1, body=payload["body"],
                     title=payload["title"], link_url=payload["link_url"], source="manual", payload={},
                     created_by=self.context.user_id,
-                ))
-                await self.audit.write("content.created", state, changed_fields=("body", "title", "link_url"))
+                )
+                await self.repository.add_content_version(version)
+                asset_ids = payload.get("asset_ids", [])
+                await self.repository.snapshot_assets(version, asset_ids)
+                await self.audit.write("content.created", state,
+                    changed_fields=("body", "title", "link_url", "assetIds") if asset_ids else ("body", "title", "link_url"),
+                    asset_count=len(asset_ids))
             else:
                 item = await self.repository.get_item(content_id)
                 if item is None:
@@ -100,12 +112,18 @@ class ContentService:
                     if not payload:
                         raise InvalidContentRequest()
                     values = {field: getattr(version, field) for field in ("body", "title", "link_url")}
-                    changed = [field for field, value in payload.items() if value != values[field]]
+                    old_assets = await self.repository.asset_ids(version.id)
+                    asset_ids = payload.get("asset_ids", old_assets)
+                    changed = [field for field, value in payload.items() if field != "asset_ids" and value != values[field]]
+                    if asset_ids != old_assets:
+                        changed.append("assetIds")
                     if not changed:
                         raise InvalidContentRequest()
-                    values.update(payload)
-                    await workflow.edit(state, created_by=self.context.user_id, **values)
-                    await self.audit.write("content.version_created", state, previous_status=previous, changed_fields=changed)
+                    values.update({k: v for k, v in payload.items() if k != "asset_ids"})
+                    version = await workflow.edit(state, created_by=self.context.user_id, **values)
+                    await self.repository.snapshot_assets(version, asset_ids)
+                    await self.audit.write("content.version_created", state, previous_status=previous,
+                                           changed_fields=changed, asset_count=len(asset_ids))
                 elif action == "submit-review":
                     await ContentStateMachine.submit_for_review(state)
                     await self.repository.save_content_state(state)
@@ -121,7 +139,8 @@ class ContentService:
                     await self.audit.write(action_name, state, previous_status=previous, owner_override=override)
         except InvalidContentTransition:
             raise ContentConflict() from None
-        result = self.serialize(await self.repository.current(content_id))
+        row = await self.repository.current(content_id)
+        result = self.serialize(row, await self.repository.asset_ids(row[1].id))
         status = 201 if action == "create" else 200
         await self.idempotency.complete(key, status, result)
         return status, result

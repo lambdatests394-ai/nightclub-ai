@@ -10,7 +10,16 @@ from backend.app.platform.enums import ContentStatus
 from backend.app.shared.schemas import ApiSchema
 
 
-class ContentCreate(ApiSchema):
+class AttachmentInput(ApiSchema):
+    @field_validator("asset_ids", check_fields=False)
+    @classmethod
+    def unique_assets(cls, value):
+        if value is None or len(value) > 10 or len(set(value)) != len(value):
+            raise ValueError("Expected at most ten distinct asset UUIDs")
+        return value
+
+
+class ContentCreate(AttachmentInput):
     model_config = ConfigDict(extra="forbid")
     campaign_id: UUID | None = None
     platform: Literal["facebook", "whatsapp"]
@@ -18,13 +27,15 @@ class ContentCreate(ApiSchema):
     body: str
     title: str | None = None
     link_url: str | None = None
+    asset_ids: list[UUID] = Field(default_factory=list, max_length=10)
 
 
-class ContentPatch(ApiSchema):
+class ContentPatch(AttachmentInput):
     model_config = ConfigDict(extra="forbid")
     body: str | None = None
     title: str | None = None
     link_url: str | None = None
+    asset_ids: list[UUID] = Field(default_factory=list, max_length=10)
 
     @field_validator("body")
     @classmethod
@@ -70,3 +81,4 @@ class ContentCurrentRead(ContentRead):
     link_url: str | None
     created_by: UUID
     updated_at: datetime
+    asset_ids: list[UUID] = Field(default_factory=list)

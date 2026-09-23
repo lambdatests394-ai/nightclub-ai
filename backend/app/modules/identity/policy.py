@@ -24,6 +24,8 @@ class Permission(StrEnum):
     CONTENT_READ = "content:read"
     CONTENT_WRITE = "content:write"
     CONTENT_REVIEW = "content:review"
+    ASSET_READ = "asset:read"
+    ASSET_WRITE = "asset:write"
 
 
 @dataclass(frozen=True)
@@ -45,6 +47,13 @@ ROLE_POLICY = MappingProxyType({
     MemberRole.REVIEWER: frozenset({Permission.ORGANIZATION_READ, Permission.CAMPAIGN_READ, Permission.CONTENT_READ, Permission.CONTENT_REVIEW}),
     MemberRole.OPERATOR: frozenset({Permission.ORGANIZATION_READ, Permission.CAMPAIGN_READ, Permission.CONTENT_READ}),
     MemberRole.VIEWER: frozenset({Permission.ORGANIZATION_READ, Permission.CAMPAIGN_READ, Permission.CONTENT_READ}),
+})
+
+# Preserve existing permissions; only the approved asset matrix is added.
+ROLE_POLICY = MappingProxyType({
+    role: permissions | {Permission.ASSET_READ} | (
+        {Permission.ASSET_WRITE} if role in {MemberRole.OWNER, MemberRole.MANAGER, MemberRole.EDITOR} else set()
+    ) for role, permissions in ROLE_POLICY.items()
 })
 
 

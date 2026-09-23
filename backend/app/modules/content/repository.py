@@ -2,7 +2,9 @@
 from sqlalchemy import insert, select, update
 
 from backend.app.modules.campaigns.repository import CampaignRepository
-from backend.app.modules.content.models import ContentItem, ContentVersion, ReviewDecision
+from backend.app.modules.content.models import ContentAsset, ContentItem, ContentVersion, ReviewDecision
+from backend.app.modules.assets.repository import AssetRepository
+from backend.app.modules.content.errors import ContentConflict, ContentReferenceNotFound
 from backend.app.modules.integrations.models import PlatformConnection
 
 
@@ -73,3 +75,24 @@ class ContentRepository:
             ContentItem.id == state.content_id, ContentItem.organization_id == self.organization_id,
         ).values(status=state.status, current_version_no=state.current_version_no,
                  approved_version_no=state.approved_version_no))
+
+    async def asset_ids(self, version_id):
+        return list(await self.session.scalars(select(ContentAsset.asset_id).where(
+            ContentAsset.content_version_id == version_id, ContentAsset.organization_id == self.organization_id,
+        ).order_by(ContentAsset.position)))
+
+    async def snapshot_assets(self, version, asset_ids):
+        repository = AssetRepository(self.session, self.organization_id)
+        # Ready is terminal in Prompt 8; no asset UPDATE lock or inverse lock order.
+        for asset_id in sorted(asset_ids):
+            asset = await repository.find_by_id(asset_id)
+            if asset is None:
+                raise ContentReferenceNotFound()
+            if asset.status != "ready":
+                raise ContentConflict()
+        if asset_ids:
+            await self.session.execute(insert(ContentAsset.__table__).inline(), [
+                {"content_version_id": version.id, "content_item_id": version.content_item_id,
+                 "organization_id": self.organization_id, "asset_id": asset_id, "position": position}
+                for position, asset_id in enumerate(asset_ids)
+            ])
