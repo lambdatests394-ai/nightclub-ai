@@ -14,6 +14,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from backend.app.api.v1.identity import router
 from backend.app.api.v1.campaigns import router as campaigns_router
 from backend.app.api.v1.content import router as content_router
+from backend.app.api.v1.assets import router as assets_router
+from backend.app.modules.assets.supabase_storage import SupabaseStorage
 from backend.app.core.config import Settings, get_settings
 from backend.app.modules.identity.authentication import SupabaseJWTVerifier
 from backend.app.modules.identity.errors import IdentityUnavailable, SecurityError
@@ -32,6 +34,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         logger.addHandler(handler)
         logger.setLevel(settings.log_level.upper())
         async with httpx.AsyncClient(verify=True, follow_redirects=False, trust_env=False) as client:
+            application.state.storage_provider = SupabaseStorage(settings, client)
             if settings.supabase_jwks_url and settings.supabase_jwt_issuer and settings.supabase_jwt_audience:
                 application.state.token_verifier = SupabaseJWTVerifier(
                     settings, JWKSCache(HTTPJWKSProvider(settings.supabase_jwks_url, client),
@@ -40,11 +43,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             try:
                 yield
             finally:
+                application.state.storage_provider = None
                 application.state.token_verifier = None
                 logger.removeHandler(handler)
                 handler.close()
 
     application = FastAPI(title=settings.app_name, version="0.1.0", lifespan=lifespan)
+    application.state.settings = settings
 
     @application.middleware("http")
     async def security_log(request: Request, call_next):
@@ -104,6 +109,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(router)
     application.include_router(campaigns_router)
     application.include_router(content_router)
+    application.include_router(assets_router)
     return application
 
 
