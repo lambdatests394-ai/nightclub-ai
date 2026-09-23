@@ -3,7 +3,8 @@
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, ForeignKeyConstraint, Integer, SmallInteger, String, Text, UniqueConstraint
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, ForeignKeyConstraint, Integer, SmallInteger, String, Text, UniqueConstraint, text
+from sqlalchemy.types import UserDefinedType
 from sqlalchemy.dialects.postgresql import ENUM, JSONB, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -40,6 +41,14 @@ class ContentItem(TimestampMixin, Base):
     created_by: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("profiles.id", ondelete="RESTRICT"), nullable=False)
 
 
+class TransactionId8(UserDefinedType):
+    """PostgreSQL full transaction ID; database-only attachment creation marker."""
+    cache_ok = True
+
+    def get_col_spec(self, **kw):
+        return "xid8"
+
+
 class ContentVersion(TimestampMixin, Base):
     __tablename__ = "content_versions"
     __table_args__ = (
@@ -56,6 +65,9 @@ class ContentVersion(TimestampMixin, Base):
     link_url: Mapped[str | None] = mapped_column(Text)
     payload: Mapped[dict] = mapped_column(JSONB, default=dict, nullable=False)
     source: Mapped[str] = mapped_column(String, nullable=False)
+    attachment_creation_xid: Mapped[int | None] = mapped_column(
+        TransactionId8(), server_default=text("pg_current_xact_id()"), deferred=True,
+    )
     ai_generation_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("ai_generation_requests.id", ondelete="RESTRICT"))
     created_by: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("profiles.id", ondelete="RESTRICT"), nullable=False)
 

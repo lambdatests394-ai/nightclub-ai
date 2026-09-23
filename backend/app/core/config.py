@@ -3,12 +3,13 @@
 from functools import lru_cache
 from urllib.parse import urlsplit
 
-from pydantic import Field, field_validator
+from pydantic import Field, SecretStr, field_validator
+from typing import Literal
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    """Non-secret settings required by the Phase 1 application scaffold."""
+    """Application settings; the server storage credential is excluded from serialization."""
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -28,6 +29,25 @@ class Settings(BaseSettings):
     supabase_jwt_allowed_algorithms: list[str] = Field(default_factory=lambda: ["ES256"])
     jwt_clock_skew_seconds: int = Field(default=60, ge=0, le=300)
     supabase_jwks_cache_ttl_seconds: int = Field(default=300, gt=0, le=600)
+    supabase_url: str = ""
+    supabase_service_role_key: SecretStr = Field(default=SecretStr(""), repr=False, exclude=True)
+    storage_bucket: Literal["nightclub-assets"] = "nightclub-assets"
+    storage_signed_download_ttl_seconds: int = Field(default=60, ge=1, le=60)
+    asset_max_image_bytes: int = Field(default=10_485_760, ge=1, le=10_485_760)
+    asset_verification_timeout_seconds: int = Field(default=15, ge=1, le=15)
+
+    @field_validator("supabase_url")
+    @classmethod
+    def storage_origin(cls, value: str) -> str:
+        if not value:
+            return value
+        url = urlsplit(value)
+        if (url.scheme != "https" or not url.hostname or url.username is not None
+                or url.password is not None or url.query or url.fragment
+                or url.path not in {"", "/"} or url.port not in {None, 443}
+                or any(ch.isspace() or ord(ch) < 32 for ch in value)):
+            raise ValueError("Storage requires an HTTPS origin without credentials or URL parameters")
+        return value.rstrip("/")
 
     @field_validator("supabase_jwt_allowed_algorithms")
     @classmethod

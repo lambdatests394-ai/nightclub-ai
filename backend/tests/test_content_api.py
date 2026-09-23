@@ -37,6 +37,18 @@ class MemoryRepository:
         self.context = context
         self.items, self.versions, self.decisions = {}, {}, []
         self.campaigns, self.connections, self.locked = {}, {}, []
+        self.assets, self.attachments = {}, {}
+
+    async def asset_ids(self, version_id):
+        return list(self.attachments.get(version_id, []))
+
+    async def snapshot_assets(self, version, asset_ids):
+        for asset_id in asset_ids:
+            if asset_id not in self.assets:
+                raise ContentReferenceNotFound()
+            if self.assets[asset_id] != "ready":
+                raise ContentConflict()
+        self.attachments[version.id] = list(asset_ids)
 
     async def create_item(self, *, content_id, actor_id, campaign_id, platform, connection_id):
         now = datetime.now(UTC)
