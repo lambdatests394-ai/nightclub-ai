@@ -4,7 +4,7 @@ from datetime import datetime
 from uuid import UUID, uuid4
 
 from sqlalchemy import CheckConstraint, DateTime, ForeignKey, ForeignKeyConstraint, Integer, SmallInteger, String, Text, UniqueConstraint
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import ENUM, JSONB, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.app.platform.database import Base, TimestampMixin
@@ -27,9 +27,9 @@ class ContentItem(TimestampMixin, Base):
     id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
     organization_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="RESTRICT"), nullable=False)
     campaign_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("campaigns.id", ondelete="RESTRICT"))
-    platform: Mapped[str] = mapped_column(String, nullable=False)
+    platform: Mapped[str] = mapped_column(ENUM("facebook", "whatsapp", "instagram", name="platform_type", schema="public", create_type=False), nullable=False)
     connection_id: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True))
-    status: Mapped[ContentStatus] = mapped_column(String, default=ContentStatus.DRAFT, nullable=False)
+    status: Mapped[ContentStatus] = mapped_column(ENUM(ContentStatus, name="content_status", schema="public", create_type=False, values_callable=lambda values: [v.value for v in values]), default=ContentStatus.DRAFT, nullable=False)
     current_version_no: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     approved_version_no: Mapped[int | None] = mapped_column(Integer)
     scheduled_for: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
