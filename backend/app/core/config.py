@@ -1,6 +1,7 @@
 """Environment-backed application configuration."""
 
 from functools import lru_cache
+from decimal import Decimal
 from urllib.parse import urlsplit
 
 from pydantic import Field, SecretStr, field_validator
@@ -35,6 +36,18 @@ class Settings(BaseSettings):
     storage_signed_download_ttl_seconds: int = Field(default=60, ge=1, le=60)
     asset_max_image_bytes: int = Field(default=10_485_760, ge=1, le=10_485_760)
     asset_verification_timeout_seconds: int = Field(default=15, ge=1, le=15)
+    ai_default_provider: Literal["openai", "gemini"] = "openai"
+    openai_api_key: SecretStr = Field(default=SecretStr(""), repr=False, exclude=True)
+    openai_model: str = ""
+    gemini_api_key: SecretStr = Field(default=SecretStr(""), repr=False, exclude=True)
+    gemini_model: str = ""
+    ai_max_output_tokens: int = Field(default=2048, ge=1, le=8192)
+    ai_daily_budget_usd: Decimal = Field(default=Decimal("100.00"), gt=0)
+    ai_provider_timeout_seconds: int = Field(default=30, ge=1, le=60)
+    openai_input_cost_per_1m_usd: Decimal = Field(default=Decimal("0"), ge=0)
+    openai_output_cost_per_1m_usd: Decimal = Field(default=Decimal("0"), ge=0)
+    gemini_input_cost_per_1m_usd: Decimal = Field(default=Decimal("0"), ge=0)
+    gemini_output_cost_per_1m_usd: Decimal = Field(default=Decimal("0"), ge=0)
 
     @field_validator("supabase_url")
     @classmethod
@@ -48,6 +61,13 @@ class Settings(BaseSettings):
                 or any(ch.isspace() or ord(ch) < 32 for ch in value)):
             raise ValueError("Storage requires an HTTPS origin without credentials or URL parameters")
         return value.rstrip("/")
+
+    @field_validator("openai_model", "gemini_model")
+    @classmethod
+    def model_name_has_no_surrounding_whitespace(cls, value: str) -> str:
+        if value and (value != value.strip() or any(ord(ch) < 32 for ch in value)):
+            raise ValueError("AI model names must be exact printable values")
+        return value
 
     @field_validator("supabase_jwt_allowed_algorithms")
     @classmethod

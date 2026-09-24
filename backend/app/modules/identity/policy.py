@@ -26,6 +26,7 @@ class Permission(StrEnum):
     CONTENT_REVIEW = "content:review"
     ASSET_READ = "asset:read"
     ASSET_WRITE = "asset:write"
+    AI_GENERATE = "ai:generate"
 
 
 @dataclass(frozen=True)
@@ -53,6 +54,8 @@ ROLE_POLICY = MappingProxyType({
 ROLE_POLICY = MappingProxyType({
     role: permissions | {Permission.ASSET_READ} | (
         {Permission.ASSET_WRITE} if role in {MemberRole.OWNER, MemberRole.MANAGER, MemberRole.EDITOR} else set()
+    ) | (
+        {Permission.AI_GENERATE} if role in {MemberRole.OWNER, MemberRole.MANAGER, MemberRole.EDITOR} else set()
     ) for role, permissions in ROLE_POLICY.items()
 })
 

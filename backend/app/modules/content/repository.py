@@ -59,7 +59,8 @@ class ContentRepository:
         await self.session.execute(insert(ContentVersion.__table__).inline().values(
             id=version.id, content_item_id=version.content_item_id, version_no=version.version_no,
             body=version.body, title=version.title, link_url=version.link_url,
-            payload={}, source="manual", created_by=version.created_by,
+            payload={}, source=version.source, ai_generation_id=version.ai_generation_id,
+            created_by=version.created_by,
         ))
 
     async def add_review_decision(self, decision):

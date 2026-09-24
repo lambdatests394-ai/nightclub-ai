@@ -17,7 +17,7 @@ PROTECTED_TABLES = (
     "campaigns", "assets", "content_items", "content_versions", "content_assets",
     "review_decisions", "publication_jobs", "publication_attempts", "ai_generation_requests",
     "webhook_events", "whatsapp_conversations", "whatsapp_messages", "outbox_events",
-    "automation_runs", "idempotency_keys", "audit_logs",
+    "automation_runs", "idempotency_keys", "audit_logs", "ai_daily_usage",
 )
 BOOTSTRAP_TABLES = ("profiles", "organization_members", "organizations")
 

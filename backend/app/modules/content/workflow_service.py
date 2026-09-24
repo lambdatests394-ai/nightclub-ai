@@ -33,11 +33,14 @@ class ContentWorkflowService:
         await self._uow.save_content_state(content)
         return record
 
-    async def edit(self, content: ContentState, *, body: str, created_by: UUID, source: str = "manual", title: str | None = None, link_url: str | None = None) -> ContentVersion:
+    async def edit(self, content: ContentState, *, body: str, created_by: UUID, source: str = "manual",
+                   ai_generation_id: UUID | None = None, title: str | None = None,
+                   link_url: str | None = None) -> ContentVersion:
         version_no = await ContentStateMachine.edit(content)
         version = ContentVersion(
             id=uuid4(), content_item_id=content.content_id, version_no=version_no, body=body,
-            title=title, link_url=link_url, payload={}, source=source, created_by=created_by,
+            title=title, link_url=link_url, payload={}, source=source,
+            ai_generation_id=ai_generation_id, created_by=created_by,
         )
         await self._uow.add_content_version(version)
         await self._uow.save_content_state(content)
