@@ -100,7 +100,7 @@ def role_row():
     return dict(rolname="nightclub_api", rolcanlogin=True, rolinherit=False,
                 rolsuper=False, rolcreatedb=False, rolcreaterole=False, rolreplication=False,
                 rolbypassrls=False, direct_login=True, memberships=False, schema_create=False,
-                table_count=20, owns_tables=False)
+                table_count=len(security.PROTECTED_TABLES), owns_tables=False)
 
 
 @pytest.mark.anyio
@@ -110,7 +110,7 @@ def role_row():
 async def test_effective_role_guard(defect):
     row = role_row()
     if defect == "rolname": row[defect] = "unexpected"
-    elif defect == "table_count": row[defect] = 19
+    elif defect == "table_count": row[defect] = len(security.PROTECTED_TABLES) - 1
     elif defect not in (None, "missing"): row[defect] = not row[defect]
     if defect == "missing": row = None
     session = session_mock()
@@ -258,7 +258,9 @@ def load_migration():
 def test_migration_scope_and_downgrade_refusal():
     migration = load_migration()
     assert migration.down_revision == "20260907_0002"
-    assert set(migration.TABLES) == set(security.PROTECTED_TABLES)
+    # 0003 remains a frozen 20-table snapshot; Prompt 9 adds only the ledger.
+    assert set(migration.TABLES) == set(security.PROTECTED_TABLES) - {"ai_daily_usage"}
+    assert len(migration.TABLES) == 20 and len(security.PROTECTED_TABLES) == 21
     assert set(migration.POLICIES) == set(security.BOOTSTRAP_TABLES)
     assert "organizations" not in migration.POLICIES["organization_members"]
     assert all("app.organization_id" not in p for p in migration.POLICIES.values())

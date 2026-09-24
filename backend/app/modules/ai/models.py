@@ -1,7 +1,9 @@
 """Auditable provider-neutral AI generation request mapping."""
+from datetime import date
+from decimal import Decimal
 from uuid import UUID, uuid4
-from sqlalchemy import ForeignKey, ForeignKeyConstraint, Integer, Numeric, String, Text, UniqueConstraint
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
+from sqlalchemy import CheckConstraint, Date, ForeignKey, ForeignKeyConstraint, Integer, Numeric, String, Text, UniqueConstraint, text
+from sqlalchemy.dialects.postgresql import ENUM, JSONB, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from backend.app.platform.database import Base, TimestampMixin
 
@@ -24,7 +26,25 @@ class AIGenerationRequest(TimestampMixin, Base):
     provider_request_id: Mapped[str | None] = mapped_column(Text)
     input_tokens: Mapped[int | None] = mapped_column(Integer)
     output_tokens: Mapped[int | None] = mapped_column(Integer)
-    estimated_cost_usd: Mapped[float | None] = mapped_column(Numeric(12, 6))
-    status: Mapped[str] = mapped_column(String, default="queued", nullable=False)
+    estimated_cost_usd: Mapped[Decimal | None] = mapped_column(Numeric(12, 6))
+    status: Mapped[str] = mapped_column(ENUM("queued", "running", "succeeded", "failed", "cancelled",
+        name="ai_status", schema="public", create_type=False), server_default=text("'queued'"), nullable=False)
     error_code: Mapped[str | None] = mapped_column(Text)
     created_by: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("profiles.id", ondelete="RESTRICT"), nullable=False)
+
+
+class AIDailyUsage(TimestampMixin, Base):
+    """Minimal tenant aggregate; contains no actor, prompt, output, or provider data."""
+    __tablename__ = "ai_daily_usage"
+    __table_args__ = (
+        CheckConstraint("estimated_cost_usd >= 0", name="ai_daily_usage_nonnegative_cost"),
+    )
+
+    organization_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True), ForeignKey("organizations.id", ondelete="RESTRICT", onupdate="RESTRICT"),
+        primary_key=True,
+    )
+    usage_date: Mapped[date] = mapped_column(Date, primary_key=True)
+    estimated_cost_usd: Mapped[Decimal] = mapped_column(
+        Numeric(12, 6), nullable=False, server_default=text("0")
+    )
