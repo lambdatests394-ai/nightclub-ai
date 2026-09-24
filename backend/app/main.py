@@ -15,6 +15,8 @@ from backend.app.api.v1.identity import router
 from backend.app.api.v1.campaigns import router as campaigns_router
 from backend.app.api.v1.content import router as content_router
 from backend.app.api.v1.assets import router as assets_router
+from backend.app.api.v1.ai import router as ai_router
+from backend.app.modules.ai.registry import ProviderRegistry
 from backend.app.modules.assets.supabase_storage import SupabaseStorage
 from backend.app.core.config import Settings, get_settings
 from backend.app.modules.identity.authentication import SupabaseJWTVerifier
@@ -35,6 +37,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         logger.setLevel(settings.log_level.upper())
         async with httpx.AsyncClient(verify=True, follow_redirects=False, trust_env=False) as client:
             application.state.storage_provider = SupabaseStorage(settings, client)
+            application.state.ai_provider_registry = ProviderRegistry.from_settings(settings, client)
             if settings.supabase_jwks_url and settings.supabase_jwt_issuer and settings.supabase_jwt_audience:
                 application.state.token_verifier = SupabaseJWTVerifier(
                     settings, JWKSCache(HTTPJWKSProvider(settings.supabase_jwks_url, client),
@@ -44,6 +47,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 yield
             finally:
                 application.state.storage_provider = None
+                application.state.ai_provider_registry = None
                 application.state.token_verifier = None
                 logger.removeHandler(handler)
                 handler.close()
@@ -92,9 +96,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @application.exception_handler(RequestValidationError)
     async def invalid_request(request: Request, error: RequestValidationError):
         # Validation errors include input values; never echo them into public errors.
+        code = "INVALID_REQUEST"
+        if request.url.path.startswith("/api/v1/ai/generations"):
+            code = "AI_VARIANT_INVALID" if request.url.path.endswith("/apply") else "AI_INVALID_REQUEST"
         return JSONResponse(status_code=422, media_type="application/problem+json", content={
             "type": "about:blank", "title": "Invalid request", "status": 422,
-            "code": "INVALID_REQUEST", "correlationId": str(request.state.correlation_id),
+            "code": code, "correlationId": str(request.state.correlation_id),
         })
 
     @application.get("/health/live", tags=["health"])
@@ -110,6 +117,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(campaigns_router)
     application.include_router(content_router)
     application.include_router(assets_router)
+    application.include_router(ai_router)
     return application
 
 

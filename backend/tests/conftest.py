@@ -14,6 +14,8 @@ from backend.app.modules.identity.jwks import JWKSCache
 
 
 def pytest_addoption(parser):
+    parser.addoption("--prompt9-postgres", action="store_true", default=False,
+                     help="Run AI generation/RLS only on nightclub_ai_prompt9_test")
     parser.addoption("--prompt8-postgres", action="store_true", default=False,
                      help="Run asset and immutable attachment RLS only on nightclub_ai_prompt8_test")
     parser.addoption("--prompt7-postgres", action="store_true", default=False,
