@@ -1,8 +1,8 @@
 """Publication and orchestration persistence mappings."""
 from datetime import datetime
 from uuid import UUID, uuid4
-from sqlalchemy import ForeignKey, ForeignKeyConstraint, SmallInteger, String, Text, UniqueConstraint
-from sqlalchemy.dialects.postgresql import JSONB, UUID as PG_UUID
+from sqlalchemy import CHAR, CheckConstraint, DateTime, ForeignKey, ForeignKeyConstraint, SmallInteger, String, Text, UniqueConstraint
+from sqlalchemy.dialects.postgresql import ENUM, JSONB, UUID as PG_UUID
 from sqlalchemy.orm import Mapped, mapped_column
 from backend.app.platform.database import Base, TimestampMixin
 
@@ -11,29 +11,54 @@ class PublicationJob(TimestampMixin, Base):
     __tablename__ = "publication_jobs"
     __table_args__ = (
         ForeignKeyConstraint(["content_item_id", "content_version_id"], ["content_versions.content_item_id", "content_versions.id"], ondelete="RESTRICT", onupdate="RESTRICT", name="publication_jobs_version_belongs_to_item"),
+        CheckConstraint("attempt_count >= 0"),
     )
     id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
     content_item_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("content_items.id", ondelete="RESTRICT"), nullable=False)
     content_version_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), nullable=False)
     idempotency_key: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), unique=True, nullable=False)
-    scheduled_for: Mapped[datetime] = mapped_column(nullable=False)
-    status: Mapped[str] = mapped_column(String, default="pending", nullable=False)
+    scheduled_for: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    status: Mapped[str] = mapped_column(
+        ENUM(
+            "pending", "leased", "publishing", "succeeded", "retryable_failure",
+            "permanent_failure", "cancelled", name="publication_status", schema="public", create_type=False,
+        ),
+        default="pending",
+        nullable=False,
+    )
     attempt_count: Mapped[int] = mapped_column(SmallInteger, default=0, nullable=False)
     lease_token: Mapped[UUID | None] = mapped_column(PG_UUID(as_uuid=True))
-    lease_expires_at: Mapped[datetime | None]
+    lease_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     published_external_id: Mapped[str | None] = mapped_column(Text)
-    next_attempt_at: Mapped[datetime | None]
+    next_attempt_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_by: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("profiles.id", ondelete="RESTRICT"), nullable=False)
 
 
 class PublicationAttempt(TimestampMixin, Base):
     __tablename__ = "publication_attempts"
+    __table_args__ = (
+        CheckConstraint("attempt_no > 0"),
+        CheckConstraint(
+            "outcome IN ('in_progress','succeeded','retryable_failure','permanent_failure')",
+            name="publication_attempts_valid_outcome",
+        ),
+        CheckConstraint(
+            "(outcome = 'in_progress' AND finished_at IS NULL) OR "
+            "(outcome IN ('succeeded','retryable_failure','permanent_failure') AND finished_at IS NOT NULL)",
+            name="publication_attempts_outcome_finish_shape",
+        ),
+        CheckConstraint(
+            "finished_at IS NULL OR finished_at >= started_at",
+            name="publication_attempts_valid_finish_time",
+        ),
+        UniqueConstraint("publication_job_id", "attempt_no"),
+    )
     id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), primary_key=True, default=uuid4)
     publication_job_id: Mapped[UUID] = mapped_column(PG_UUID(as_uuid=True), ForeignKey("publication_jobs.id", ondelete="RESTRICT"), nullable=False)
     attempt_no: Mapped[int] = mapped_column(SmallInteger, nullable=False)
-    started_at: Mapped[datetime] = mapped_column(nullable=False)
-    finished_at: Mapped[datetime | None]
-    request_fingerprint: Mapped[str] = mapped_column(String(64), nullable=False)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    request_fingerprint: Mapped[str] = mapped_column(CHAR(64), nullable=False)
     provider_request_id: Mapped[str | None] = mapped_column(Text)
     provider_response: Mapped[dict | None] = mapped_column(JSONB)
     outcome: Mapped[str] = mapped_column(String, nullable=False)

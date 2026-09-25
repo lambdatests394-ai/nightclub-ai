@@ -28,6 +28,15 @@ class ContentRepository:
             ContentItem.id == content_id, ContentItem.organization_id == self.organization_id,
         ))).one_or_none()
 
+    async def version(self, content_id, version_no):
+        return await self.session.scalar(select(ContentVersion).join(
+            ContentItem, ContentItem.id == ContentVersion.content_item_id,
+        ).where(
+            ContentVersion.content_item_id == content_id,
+            ContentVersion.version_no == version_no,
+            ContentItem.organization_id == self.organization_id,
+        ))
+
     async def page(self, after, limit):
         query = self.current_query().where(ContentItem.organization_id == self.organization_id)
         if after is not None:
@@ -76,6 +85,12 @@ class ContentRepository:
             ContentItem.id == state.content_id, ContentItem.organization_id == self.organization_id,
         ).values(status=state.status, current_version_no=state.current_version_no,
                  approved_version_no=state.approved_version_no))
+
+    async def save_publication_state(self, state, scheduled_for):
+        await self.session.execute(update(ContentItem).where(
+            ContentItem.id == state.content_id,
+            ContentItem.organization_id == self.organization_id,
+        ).values(status=state.status, scheduled_for=scheduled_for))
 
     async def asset_ids(self, version_id):
         return list(await self.session.scalars(select(ContentAsset.asset_id).where(

@@ -258,9 +258,12 @@ def load_migration():
 def test_migration_scope_and_downgrade_refusal():
     migration = load_migration()
     assert migration.down_revision == "20260907_0002"
-    # 0003 remains a frozen 20-table snapshot; Prompt 9 adds only the ledger.
-    assert set(migration.TABLES) == set(security.PROTECTED_TABLES) - {"ai_daily_usage"}
-    assert len(migration.TABLES) == 20 and len(security.PROTECTED_TABLES) == 21
+    # 0003 remains a frozen 20-table snapshot; later revisions add the AI ledger
+    # and the Facebook OAuth replay-protection table without rewriting history.
+    assert set(migration.TABLES) == set(security.PROTECTED_TABLES) - {
+        "ai_daily_usage", "facebook_oauth_states",
+    }
+    assert len(migration.TABLES) == 20 and len(security.PROTECTED_TABLES) == 22
     assert set(migration.POLICIES) == set(security.BOOTSTRAP_TABLES)
     assert "organizations" not in migration.POLICIES["organization_members"]
     assert all("app.organization_id" not in p for p in migration.POLICIES.values())

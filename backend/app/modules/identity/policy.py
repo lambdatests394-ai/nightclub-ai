@@ -27,6 +27,8 @@ class Permission(StrEnum):
     ASSET_READ = "asset:read"
     ASSET_WRITE = "asset:write"
     AI_GENERATE = "ai:generate"
+    FACEBOOK_MANAGE_CONNECTION = "facebook:manage_connection"
+    FACEBOOK_PUBLISH = "facebook:publish"
 
 
 @dataclass(frozen=True)
@@ -56,6 +58,9 @@ ROLE_POLICY = MappingProxyType({
         {Permission.ASSET_WRITE} if role in {MemberRole.OWNER, MemberRole.MANAGER, MemberRole.EDITOR} else set()
     ) | (
         {Permission.AI_GENERATE} if role in {MemberRole.OWNER, MemberRole.MANAGER, MemberRole.EDITOR} else set()
+    ) | (
+        {Permission.FACEBOOK_MANAGE_CONNECTION, Permission.FACEBOOK_PUBLISH}
+        if role in {MemberRole.OWNER, MemberRole.MANAGER} else set()
     ) for role, permissions in ROLE_POLICY.items()
 })
 
