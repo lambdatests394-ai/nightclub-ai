@@ -22,9 +22,17 @@ def test_connection_output_never_contains_credentials_ciphertext() -> None:
         "id": uuid4(), "organization_id": uuid4(), "platform": "facebook",
         "external_account_id": "page", "display_name": "Night Club",
         "capabilities": {}, "status": "active", "token_expires_at": None,
-        "last_verified_at": None, "credentials_ciphertext": b"must-not-leak",
+        "last_verified_at": None, "last_error_code": None, "last_error_at": None,
+        "created_at": datetime.now(UTC), "updated_at": datetime.now(UTC),
+        "credentials_ciphertext": b"must-not-leak", "credential_key_version": 7,
+        "organization_id": uuid4(),
     }
 
     payload = PlatformConnectionRead.model_validate(source).model_dump(by_alias=True)
     assert "credentialsCiphertext" not in payload
     assert "credentials_ciphertext" not in payload
+    assert "credentialKeyVersion" not in payload
+    assert "organizationId" not in payload
+    assert payload["createdAt"] is not None and payload["updatedAt"] is not None
+    for forbidden in ("accessToken", "access_token", "tokenType", "encryptionKey", "nonce"):
+        assert forbidden not in payload

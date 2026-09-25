@@ -1,16 +1,26 @@
-"""Only the six frozen Prompt 7 endpoints."""
+"""Content workflow and transaction-only Facebook scheduling endpoints."""
 from typing import Annotated
 from uuid import UUID
 from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import JSONResponse
 
+from backend.app.modules.automation.dependencies import get_publication_service
+from backend.app.modules.automation.service import PublicationService
 from backend.app.modules.content.dependencies import get_content_service
 from backend.app.modules.content.errors import InvalidContentRequest
-from backend.app.modules.content.schemas import ContentCreate, ContentPatch, ContentReviewRequest
+from backend.app.modules.content.schemas import (
+    ContentCreate,
+    ContentPatch,
+    ContentReviewRequest,
+    ContentScheduleRequest,
+)
 from backend.app.modules.content.service import ContentService
 
 router = APIRouter(prefix="/api/v1/content", tags=["content"])
 Service = Annotated[ContentService, Depends(get_content_service, scope="function")]
+Publication = Annotated[
+    PublicationService, Depends(get_publication_service, scope="function")
+]
 
 
 def key(request):
@@ -63,4 +73,28 @@ async def submit(content_id: UUID, request: Request, service: Service):
 @router.post("/{content_id}/review")
 async def review(content_id: UUID, body: ContentReviewRequest, request: Request, service: Service):
     status, data = await service.mutate("review", key(request), body.model_dump(), content_id)
+    return JSONResponse(envelope(request, data), status_code=status)
+
+
+@router.post("/{content_id}/schedule", status_code=201)
+async def schedule(
+        content_id: UUID, body: ContentScheduleRequest,
+        request: Request, service: Publication):
+    status, data = await service.schedule(content_id, key(request), body)
+    return JSONResponse(envelope(request, data), status_code=status)
+
+
+@router.post("/{content_id}/cancel-schedule")
+async def cancel_schedule(content_id: UUID, request: Request, service: Publication):
+    if await request.body():
+        raise InvalidContentRequest()
+    status, data = await service.cancel_schedule(content_id, key(request))
+    return JSONResponse(envelope(request, data), status_code=status)
+
+
+@router.post("/{content_id}/publish-now", status_code=201)
+async def publish_now(content_id: UUID, request: Request, service: Publication):
+    if await request.body():
+        raise InvalidContentRequest()
+    status, data = await service.publish_now(content_id, key(request))
     return JSONResponse(envelope(request, data), status_code=status)

@@ -6,13 +6,13 @@ from backend.app.modules.automation.models import AutomationRun, OutboxEvent, Pu
 from backend.app.modules.campaigns.models import Campaign
 from backend.app.modules.content.models import ContentAsset, ContentItem, ContentVersion, ReviewDecision
 from backend.app.modules.identity.models import Organization, OrganizationMember, Profile
-from backend.app.modules.integrations.models import PlatformConnection, WhatsAppConversation, WhatsAppMessage
+from backend.app.modules.integrations.models import FacebookOAuthState, PlatformConnection, WhatsAppConversation, WhatsAppMessage
 from backend.app.modules.webhooks.models import WebhookEvent
 from backend.app.shared.models import IdempotencyKey
 
 __all__ = [
     "AIDailyUsage", "AIGenerationRequest", "Asset", "AuditLog", "AutomationRun", "Campaign", "ContentAsset",
     "ContentItem", "ContentVersion", "IdempotencyKey", "Organization", "OrganizationMember",
-    "OutboxEvent", "PlatformConnection", "Profile", "PublicationAttempt", "PublicationJob",
+    "FacebookOAuthState", "OutboxEvent", "PlatformConnection", "Profile", "PublicationAttempt", "PublicationJob",
     "ReviewDecision", "WebhookEvent", "WhatsAppConversation", "WhatsAppMessage",
 ]

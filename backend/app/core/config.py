@@ -2,6 +2,7 @@
 
 from functools import lru_cache
 from decimal import Decimal
+import re
 from urllib.parse import urlsplit
 
 from pydantic import Field, SecretStr, field_validator
@@ -48,6 +49,13 @@ class Settings(BaseSettings):
     openai_output_cost_per_1m_usd: Decimal = Field(default=Decimal("0"), ge=0)
     gemini_input_cost_per_1m_usd: Decimal = Field(default=Decimal("0"), ge=0)
     gemini_output_cost_per_1m_usd: Decimal = Field(default=Decimal("0"), ge=0)
+    meta_app_id: str = ""
+    meta_app_secret: SecretStr = Field(default=SecretStr(""), repr=False, exclude=True)
+    meta_oauth_redirect_uri: str = ""
+    meta_graph_api_version: str = ""
+    meta_credential_encryption_key: SecretStr = Field(default=SecretStr(""), repr=False, exclude=True)
+    meta_credential_key_version: int = Field(default=1, ge=1)
+    meta_oauth_state_key: SecretStr = Field(default=SecretStr(""), repr=False, exclude=True)
 
     @field_validator("supabase_url")
     @classmethod
@@ -67,6 +75,32 @@ class Settings(BaseSettings):
     def model_name_has_no_surrounding_whitespace(cls, value: str) -> str:
         if value and (value != value.strip() or any(ord(ch) < 32 for ch in value)):
             raise ValueError("AI model names must be exact printable values")
+        return value
+
+    @field_validator("meta_app_id")
+    @classmethod
+    def meta_app_identifier(cls, value: str) -> str:
+        if value and (not value.isascii() or not value.isdigit() or value.startswith("0")):
+            raise ValueError("Meta App ID must be an exact decimal identifier")
+        return value
+
+    @field_validator("meta_graph_api_version")
+    @classmethod
+    def meta_graph_version(cls, value: str) -> str:
+        if value and re.fullmatch(r"v[1-9][0-9]*\.[0-9]+", value) is None:
+            raise ValueError("Meta Graph API version must use the vN.N form")
+        return value
+
+    @field_validator("meta_oauth_redirect_uri")
+    @classmethod
+    def meta_redirect_url(cls, value: str) -> str:
+        if not value:
+            return value
+        url = urlsplit(value)
+        if (url.scheme != "https" or not url.hostname or url.username is not None
+                or url.password is not None or url.fragment
+                or any(ch.isspace() or ord(ch) < 32 for ch in value)):
+            raise ValueError("Meta OAuth redirect must be an HTTPS URL without credentials or fragment")
         return value
 
     @field_validator("supabase_jwt_allowed_algorithms")

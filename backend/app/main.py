@@ -16,6 +16,7 @@ from backend.app.api.v1.campaigns import router as campaigns_router
 from backend.app.api.v1.content import router as content_router
 from backend.app.api.v1.assets import router as assets_router
 from backend.app.api.v1.ai import router as ai_router
+from backend.app.api.v1.connections import router as connections_router
 from backend.app.modules.ai.registry import ProviderRegistry
 from backend.app.modules.assets.supabase_storage import SupabaseStorage
 from backend.app.core.config import Settings, get_settings
@@ -36,6 +37,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         logger.addHandler(handler)
         logger.setLevel(settings.log_level.upper())
         async with httpx.AsyncClient(verify=True, follow_redirects=False, trust_env=False) as client:
+            application.state.http_client = client
             application.state.storage_provider = SupabaseStorage(settings, client)
             application.state.ai_provider_registry = ProviderRegistry.from_settings(settings, client)
             if settings.supabase_jwks_url and settings.supabase_jwt_issuer and settings.supabase_jwt_audience:
@@ -49,6 +51,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 application.state.storage_provider = None
                 application.state.ai_provider_registry = None
                 application.state.token_verifier = None
+                application.state.http_client = None
                 logger.removeHandler(handler)
                 handler.close()
 
@@ -118,6 +121,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(content_router)
     application.include_router(assets_router)
     application.include_router(ai_router)
+    application.include_router(connections_router)
     return application
 
 
