@@ -18,6 +18,7 @@ PROTECTED_TABLES = (
     "review_decisions", "publication_jobs", "publication_attempts", "ai_generation_requests",
     "webhook_events", "whatsapp_conversations", "whatsapp_messages", "outbox_events",
     "automation_runs", "idempotency_keys", "audit_logs", "ai_daily_usage",
+    "facebook_oauth_states",
 )
 BOOTSTRAP_TABLES = ("profiles", "organization_members", "organizations")
 

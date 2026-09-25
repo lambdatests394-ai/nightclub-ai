@@ -59,8 +59,17 @@ class ContentReviewRequest(ApiSchema):
 
 
 class ContentScheduleRequest(ApiSchema):
-    version_no: int
+    model_config = ConfigDict(extra="forbid")
+    version_no: int = Field(strict=True, ge=1)
     scheduled_for: datetime
+
+    @field_validator("scheduled_for")
+    @classmethod
+    def aware_utc(cls, value: datetime) -> datetime:
+        if value.tzinfo is None or value.utcoffset() is None:
+            raise ValueError("Schedule time must be timezone-aware")
+        from datetime import UTC
+        return value.astimezone(UTC)
 
 
 class ContentRead(ApiSchema):
