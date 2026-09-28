@@ -1,4 +1,5 @@
 """FastAPI application with injectable security and per-process JWKS lifecycle."""
+import asyncio
 import json
 import logging
 import sys
@@ -17,6 +18,8 @@ from backend.app.api.v1.content import router as content_router
 from backend.app.api.v1.assets import router as assets_router
 from backend.app.api.v1.ai import router as ai_router
 from backend.app.api.v1.connections import router as connections_router
+from backend.app.api.internal.automation import router as internal_automation_router
+from backend.app.core.scheduler_database import dispose_scheduler_engine
 from backend.app.modules.ai.registry import ProviderRegistry
 from backend.app.modules.assets.supabase_storage import SupabaseStorage
 from backend.app.core.config import Settings, get_settings
@@ -48,12 +51,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             try:
                 yield
             finally:
-                application.state.storage_provider = None
-                application.state.ai_provider_registry = None
-                application.state.token_verifier = None
-                application.state.http_client = None
-                logger.removeHandler(handler)
-                handler.close()
+                disposal = asyncio.create_task(dispose_scheduler_engine())
+                interrupted = False
+                try:
+                    while not disposal.done():
+                        try:
+                            await asyncio.shield(disposal)
+                        except asyncio.CancelledError:
+                            interrupted = True
+                    disposal.result()
+                finally:
+                    application.state.storage_provider = None
+                    application.state.ai_provider_registry = None
+                    application.state.token_verifier = None
+                    application.state.http_client = None
+                    logger.removeHandler(handler)
+                    handler.close()
+                if interrupted:
+                    raise asyncio.CancelledError()
 
     application = FastAPI(title=settings.app_name, version="0.1.0", lifespan=lifespan)
     application.state.settings = settings
@@ -63,16 +78,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         request.state.correlation_id = uuid4()
         response = await call_next(request)
         response.headers["X-Correlation-Id"] = str(request.state.correlation_id)
-        if request.url.path.startswith("/api/v1/"):
+        if request.url.path.startswith("/api/v1/") or request.url.path.startswith("/internal/"):
             response.headers["Cache-Control"] = "no-store"
             # Allow-list: no request headers, query, JWT or exception text.
-            logger.info(json.dumps({
+            fields = {
                 "event": "protected_request", "correlationId": str(request.state.correlation_id),
-                "userId": getattr(request.state, "verified_user_id", None),
-                "organizationId": getattr(request.state, "organization_id", None),
                 "endpoint": getattr(request.scope.get("route"), "path", "unmatched"),
                 "status": response.status_code,
-            }))
+            }
+            if request.url.path.startswith("/api/v1/"):
+                fields["userId"] = getattr(request.state, "verified_user_id", None)
+                fields["organizationId"] = getattr(request.state, "organization_id", None)
+            logger.info(json.dumps(fields))
         return response
 
     @application.exception_handler(SecurityError)
@@ -122,6 +139,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(assets_router)
     application.include_router(ai_router)
     application.include_router(connections_router)
+    application.include_router(internal_automation_router)
     return application
 
 
