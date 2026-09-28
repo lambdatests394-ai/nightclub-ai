@@ -15,11 +15,16 @@ from sqlalchemy import insert, select, update
 from sqlalchemy.orm.attributes import set_committed_value
 
 from backend.app.core import database
-from backend.app.core.database_security import establish_user_context, verify_runtime_role
+from backend.app.core.database_security import (
+    establish_system_automation_context,
+    establish_user_context,
+    verify_runtime_role,
+)
 from backend.app.modules.automation.audit import PublicationAuditWriter
 from backend.app.modules.automation.models import PublicationAttempt, PublicationJob
 from backend.app.modules.automation.schemas import (
     CredentialEnvelope,
+    ExecutionAuthority,
     ExecutionMode,
     ExecutionSnapshot,
     ExecutionStatus,
@@ -28,7 +33,13 @@ from backend.app.modules.automation.schemas import (
 )
 from backend.app.modules.content.models import ContentAsset, ContentItem, ContentVersion
 from backend.app.modules.content.state_machine import ContentState, ContentStateMachine
-from backend.app.modules.identity.policy import CurrentUser, Permission, require_permission
+from backend.app.modules.identity.models import Organization
+from backend.app.modules.identity.policy import (
+    CurrentUser,
+    Permission,
+    SystemAutomationContext,
+    require_permission,
+)
 from backend.app.modules.identity.repository import SQLAlchemyIdentityRepository
 from backend.app.modules.identity.service import IdentityService
 from backend.app.modules.integrations.credentials import CredentialBinding, CredentialCipher
@@ -53,6 +64,10 @@ RETRY_BACKOFF = {1: timedelta(seconds=30), 2: timedelta(seconds=120)}
 class PublicationExecutionStore(Protocol):
     async def prepare(
         self, organization_id: UUID, actor_id: UUID, job_id: UUID, now: datetime,
+    ) -> Preparation: ...
+
+    async def prepare_system(
+        self, organization_id: UUID, job_id: UUID, now: datetime,
     ) -> Preparation: ...
 
     async def begin_post(
@@ -143,21 +158,29 @@ class SQLAlchemyPublicationExecutionStore:
         self.expected_role = expected_role
 
     @asynccontextmanager
-    async def _transaction(self, organization_id: UUID, actor_id: UUID):
+    async def _transaction(
+            self, organization_id: UUID, actor_id: UUID | None,
+            authority: ExecutionAuthority):
         factory = self._factory or database.SessionFactory
         if factory is None:
             raise RuntimeError("Database session factory is unavailable")
         async with factory() as session:
             async with session.begin():
-                user = CurrentUser(actor_id)
                 await verify_runtime_role(session, self.expected_role)
-                await establish_user_context(session, user)
-                identity = SQLAlchemyIdentityRepository(session)
-                context, _ = await IdentityService(
-                    identity,
-                    organization_context_installer=identity.establish_organization_context,
-                ).organization(user, organization_id)
-                require_permission(context, Permission.FACEBOOK_PUBLISH)
+                if authority == ExecutionAuthority.USER and isinstance(actor_id, UUID):
+                    user = CurrentUser(actor_id)
+                    await establish_user_context(session, user)
+                    identity = SQLAlchemyIdentityRepository(session)
+                    context, _ = await IdentityService(
+                        identity,
+                        organization_context_installer=identity.establish_organization_context,
+                    ).organization(user, organization_id)
+                    require_permission(context, Permission.FACEBOOK_PUBLISH)
+                elif authority == ExecutionAuthority.SYSTEM_AUTOMATION and actor_id is None:
+                    context = SystemAutomationContext(organization_id)
+                    await establish_system_automation_context(session, context)
+                else:
+                    raise RuntimeError("Invalid publication execution authority")
                 yield session, context
 
     @staticmethod
@@ -201,8 +224,22 @@ class SQLAlchemyPublicationExecutionStore:
     async def prepare(
             self, organization_id: UUID, actor_id: UUID, job_id: UUID,
             now: datetime) -> Preparation:
+        return await self._prepare(
+            organization_id, actor_id, job_id, now, ExecutionAuthority.USER,
+        )
+
+    async def prepare_system(
+            self, organization_id: UUID, job_id: UUID, now: datetime) -> Preparation:
+        return await self._prepare(
+            organization_id, None, job_id, now, ExecutionAuthority.SYSTEM_AUTOMATION,
+        )
+
+    async def _prepare(
+            self, organization_id: UUID, actor_id: UUID | None, job_id: UUID,
+            now: datetime, authority: ExecutionAuthority) -> Preparation:
         lease_token = uuid4()
-        async with self._transaction(organization_id, actor_id) as (session, context):
+        async with self._transaction(
+                organization_id, actor_id, authority) as (session, context):
             job = await self._locked_job(session, job_id)
             if job is None:
                 return Preparation(ExecutionStatus.LEASE_UNAVAILABLE)
@@ -211,6 +248,14 @@ class SQLAlchemyPublicationExecutionStore:
             ).with_for_update())
             if item is None or item.organization_id != organization_id:
                 return Preparation(ExecutionStatus.LEASE_UNAVAILABLE)
+
+            organization_active = True
+            if authority == ExecutionAuthority.SYSTEM_AUTOMATION:
+                organization_active = await session.scalar(select(
+                    Organization.is_active,
+                ).where(Organization.id == organization_id))
+                if organization_active is None:
+                    return Preparation(ExecutionStatus.LEASE_UNAVAILABLE)
 
             latest = await self._latest_attempt(session, job.id)
             reconcile = False
@@ -224,7 +269,8 @@ class SQLAlchemyPublicationExecutionStore:
                     latest is not None and isinstance(latest.provider_response, dict)
                     and latest.provider_response.get("reconciliation_result") == "required"
                 )
-                if job.attempt_count >= MAX_PROVIDER_POST_ATTEMPTS and not reconcile:
+                if (organization_active and job.attempt_count >= MAX_PROVIDER_POST_ATTEMPTS
+                        and not reconcile):
                     if not await self._job_transition(
                             session, job, "leased", lease_token=lease_token,
                             lease_expires_at=now + LEASE_DURATION):
@@ -263,6 +309,15 @@ class SQLAlchemyPublicationExecutionStore:
                     session, job, "leased", lease_token=lease_token,
                     lease_expires_at=now + LEASE_DURATION):
                 return Preparation(ExecutionStatus.LEASE_UNAVAILABLE)
+
+            if not organization_active:
+                await self._terminal_without_attempt(
+                    session, context, item, job, "ORGANIZATION_INACTIVE", now,
+                )
+                return Preparation(
+                    ExecutionStatus.PERMANENT_FAILURE,
+                    error_code="ORGANIZATION_INACTIVE",
+                )
 
             version = (await session.execute(select(
                 ContentVersion.id, ContentVersion.content_item_id,
@@ -322,6 +377,7 @@ class SQLAlchemyPublicationExecutionStore:
                     material.external_account_id, version.id, version.body, version.link_url,
                 ),
                 mode=mode,
+                authority=authority,
                 attempt_started_at=started_at,
             )
             return Preparation(snapshot=snapshot)
@@ -351,7 +407,8 @@ class SQLAlchemyPublicationExecutionStore:
     async def begin_post(
             self, snapshot: ExecutionSnapshot, now: datetime) -> ExecutionSnapshot | None:
         async with self._transaction(
-                snapshot.organization_id, snapshot.actor_id) as (session, context):
+                snapshot.organization_id, snapshot.actor_id,
+                snapshot.authority) as (session, context):
             job = await self._locked_job(session, snapshot.job_id)
             if (job is None or job.status != "leased" or job.lease_token != snapshot.lease_token
                     or job.lease_expires_at is None or job.lease_expires_at <= now
@@ -395,7 +452,8 @@ class SQLAlchemyPublicationExecutionStore:
             self, snapshot: ExecutionSnapshot, error_code: str,
             now: datetime) -> bool:
         async with self._transaction(
-                snapshot.organization_id, snapshot.actor_id) as (session, context):
+                snapshot.organization_id, snapshot.actor_id,
+                snapshot.authority) as (session, context):
             job = await self._locked_job(session, snapshot.job_id)
             if (job is None or job.status != "leased"
                     or job.lease_token != snapshot.lease_token):
@@ -425,7 +483,8 @@ class SQLAlchemyPublicationExecutionStore:
         if snapshot.attempt_id is None or snapshot.attempt_no is None:
             return None
         async with self._transaction(
-                snapshot.organization_id, snapshot.actor_id) as (session, context):
+                snapshot.organization_id, snapshot.actor_id,
+                snapshot.authority) as (session, context):
             job = await self._locked_job(session, snapshot.job_id)
             if (job is None or job.status != "publishing"
                     or job.lease_token != snapshot.lease_token):
@@ -550,7 +609,8 @@ class SQLAlchemyPublicationExecutionStore:
         if result.disposition == ReconciliationDisposition.NOT_FOUND:
             return None
         async with self._transaction(
-                snapshot.organization_id, snapshot.actor_id) as (session, context):
+                snapshot.organization_id, snapshot.actor_id,
+                snapshot.authority) as (session, context):
             job = await self._locked_job(session, snapshot.job_id)
             if (job is None or job.status != "leased"
                     or job.lease_token != snapshot.lease_token):
@@ -624,8 +684,29 @@ class FacebookPublicationExecutor:
         preparation = await self.store.prepare(
             organization_id, actor_id, publication_job_id, prepared_at,
         )
+        return await self._execute_prepared(
+            preparation, publication_job_id, prepared_at,
+        )
+
+    async def execute_system(
+            self, organization_id: UUID,
+            publication_job_id: UUID) -> ExecutorResult:
+        prepared_at = self.clock().astimezone(UTC)
+        preparation = await self.store.prepare_system(
+            organization_id, publication_job_id, prepared_at,
+        )
+        return await self._execute_prepared(
+            preparation, publication_job_id, prepared_at,
+        )
+
+    async def _execute_prepared(
+            self, preparation: Preparation, publication_job_id: UUID,
+            prepared_at: datetime) -> ExecutorResult:
         if preparation.status is not None:
-            return ExecutorResult(preparation.status, publication_job_id)
+            return ExecutorResult(
+                preparation.status, publication_job_id,
+                error_code=preparation.error_code,
+            )
         snapshot = preparation.snapshot
         if snapshot is None:
             return ExecutorResult(ExecutionStatus.LEASE_UNAVAILABLE, publication_job_id)

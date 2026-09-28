@@ -31,6 +31,11 @@ class ExecutionMode(StrEnum):
     RECONCILE = "reconcile"
 
 
+class ExecutionAuthority(StrEnum):
+    USER = "user"
+    SYSTEM_AUTOMATION = "system_automation"
+
+
 class ExecutionStatus(StrEnum):
     PUBLISHED = "published"
     RETRY_SCHEDULED = "retry_scheduled"
@@ -54,7 +59,7 @@ class CredentialEnvelope:
 @dataclass(frozen=True, slots=True)
 class ExecutionSnapshot:
     organization_id: UUID
-    actor_id: UUID
+    actor_id: UUID | None
     content_id: UUID
     content_version_id: UUID
     job_id: UUID
@@ -64,6 +69,7 @@ class ExecutionSnapshot:
     link_url: str | None = field(default=None, repr=False)
     request_fingerprint: str = ""
     mode: ExecutionMode = ExecutionMode.POST
+    authority: ExecutionAuthority = ExecutionAuthority.USER
     attempt_id: UUID | None = None
     attempt_no: int | None = None
     attempt_started_at: datetime | None = None
@@ -73,6 +79,7 @@ class ExecutionSnapshot:
 class Preparation:
     status: ExecutionStatus | None = None
     snapshot: ExecutionSnapshot | None = None
+    error_code: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
