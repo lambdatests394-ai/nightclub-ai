@@ -6,6 +6,7 @@ import pytest
 from sqlalchemy.dialects import postgresql
 
 from backend.app.modules.integrations.repository import FacebookConnectionRepository
+from backend.app.modules.integrations.errors import FacebookInvalidOAuthState
 
 
 def sql(statement):
@@ -91,3 +92,19 @@ async def test_reconnect_updates_mutable_fields_only():
     params = session.execute.await_args.args[0].compile().params
     assert not {"id", "organization_id", "platform", "external_account_id"} & set(params)
     assert any(name.startswith("display_name") for name in params)
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("operation", ["insert", "get", "consume"])
+async def test_system_repository_authority_cannot_use_oauth_state(operation):
+    repository = FacebookConnectionRepository(AsyncMock(), uuid4(), None)
+    with pytest.raises(FacebookInvalidOAuthState):
+        if operation == "insert":
+            await repository.insert_oauth_state(
+                state_digest="digest", nonce_digest="nonce",
+                requested_page_id="123", expires_at=datetime.now(UTC),
+            )
+        elif operation == "get":
+            await repository.get_oauth_state("digest")
+        else:
+            await repository.consume_oauth_state(uuid4(), datetime.now(UTC))

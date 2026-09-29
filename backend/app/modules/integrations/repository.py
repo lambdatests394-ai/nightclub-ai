@@ -9,6 +9,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.modules.integrations.models import FacebookOAuthState, PlatformConnection
+from backend.app.modules.integrations.errors import FacebookInvalidOAuthState
 from backend.app.modules.integrations.schemas import PlatformConnectionRead
 
 
@@ -37,7 +38,7 @@ class OAuthStateRecord:
 
 
 class FacebookConnectionRepository:
-    def __init__(self, session: AsyncSession, organization_id: UUID, actor_id: UUID):
+    def __init__(self, session: AsyncSession, organization_id: UUID, actor_id: UUID | None):
         self.session = session
         self.organization_id = organization_id
         self.actor_id = actor_id
@@ -147,6 +148,8 @@ class FacebookConnectionRepository:
 
     async def insert_oauth_state(self, *, state_digest: str, nonce_digest: str,
                                  requested_page_id: str, expires_at: datetime) -> OAuthStateRecord:
+        if self.actor_id is None:
+            raise FacebookInvalidOAuthState()
         state_id = uuid4()
         await self.session.execute(insert(FacebookOAuthState.__table__).inline().values(
             id=state_id, organization_id=self.organization_id, actor_id=self.actor_id,
@@ -157,6 +160,8 @@ class FacebookConnectionRepository:
                                 nonce_digest, requested_page_id, expires_at, None)
 
     async def get_oauth_state(self, digest: str, *, lock: bool = False) -> OAuthStateRecord | None:
+        if self.actor_id is None:
+            raise FacebookInvalidOAuthState()
         statement = select(
             FacebookOAuthState.id, FacebookOAuthState.organization_id, FacebookOAuthState.actor_id,
             FacebookOAuthState.state_digest, FacebookOAuthState.nonce_digest,
@@ -173,6 +178,8 @@ class FacebookConnectionRepository:
         return OAuthStateRecord(*row) if row is not None else None
 
     async def consume_oauth_state(self, state_id: UUID, consumed_at: datetime) -> bool:
+        if self.actor_id is None:
+            raise FacebookInvalidOAuthState()
         result = await self.session.execute(update(FacebookOAuthState).where(
             FacebookOAuthState.id == state_id,
             FacebookOAuthState.organization_id == self.organization_id,

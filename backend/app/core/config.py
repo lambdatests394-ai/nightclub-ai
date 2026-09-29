@@ -5,7 +5,7 @@ from decimal import Decimal
 import re
 from urllib.parse import urlsplit
 
-from pydantic import Field, SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator, model_validator
 from typing import Literal
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -17,6 +17,7 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
+        hide_input_in_errors=True,
     )
 
     app_name: str = "nightclub-ai"
@@ -25,6 +26,15 @@ class Settings(BaseSettings):
     database_url: str | None = None
     database_migration_url: str | None = None
     database_runtime_expected_role: str = Field(default="nightclub_api", pattern=r"^[a-z_][a-z0-9_]{0,62}$")
+    database_scheduler_url: SecretStr = Field(default=SecretStr(""), repr=False, exclude=True)
+    database_scheduler_expected_role: str = Field(
+        default="nightclub_scheduler", pattern=r"^[a-z_][a-z0-9_]{0,62}$",
+    )
+    n8n_internal_secret: SecretStr = Field(default=SecretStr(""), repr=False, exclude=True)
+    n8n_internal_secret_previous: SecretStr = Field(default=SecretStr(""), repr=False, exclude=True)
+    automation_hmac_max_skew_seconds: int = Field(default=300, ge=30, le=600)
+    automation_publish_batch_size: int = Field(default=8, ge=1, le=32)
+    automation_publish_max_concurrency: int = Field(default=4, ge=1, le=8)
     supabase_jwt_issuer: str = ""
     supabase_jwt_audience: str = ""
     supabase_jwks_url: str = ""
@@ -56,6 +66,30 @@ class Settings(BaseSettings):
     meta_credential_encryption_key: SecretStr = Field(default=SecretStr(""), repr=False, exclude=True)
     meta_credential_key_version: int = Field(default=1, ge=1)
     meta_oauth_state_key: SecretStr = Field(default=SecretStr(""), repr=False, exclude=True)
+
+    @field_validator("n8n_internal_secret", "n8n_internal_secret_previous")
+    @classmethod
+    def valid_internal_hmac_secret(cls, value: SecretStr) -> SecretStr:
+        secret = value.get_secret_value()
+        if not secret:
+            return value
+        if secret != secret.strip() or any(ord(ch) < 32 or 127 <= ord(ch) <= 159 for ch in secret):
+            raise ValueError("Internal HMAC secrets must be exact printable values")
+        if len(secret.encode("utf-8")) < 32:
+            raise ValueError("Internal HMAC secrets must contain at least 32 bytes")
+        return value
+
+    @model_validator(mode="after")
+    def valid_automation_settings(self) -> "Settings":
+        current = self.n8n_internal_secret.get_secret_value()
+        previous = self.n8n_internal_secret_previous.get_secret_value()
+        if previous and not current:
+            raise ValueError("A previous internal HMAC secret requires a current secret")
+        if current and previous and current == previous:
+            raise ValueError("Current and previous internal HMAC secrets must differ")
+        if self.automation_publish_max_concurrency > self.automation_publish_batch_size:
+            raise ValueError("Automation concurrency must not exceed batch size")
+        return self
 
     @field_validator("supabase_url")
     @classmethod

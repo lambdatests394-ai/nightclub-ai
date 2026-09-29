@@ -20,3 +20,24 @@ La decisión es intencional: E/S asíncrona, lógica pura síncrona. Los reposit
 - Las futuras rutas FastAPI y servicios de dominio que intervengan en una operación de aplicación deberán conservar la cadena asíncrona, sin llamadas bloqueantes a `psycopg`.
 - Las migraciones usarán únicamente el motor síncrono configurado en `backend/migrations/env.py`; este camino queda reservado para DDL y mantenimiento, no para lógica de negocio.
 - Las nuevas políticas puras se prueban directamente como funciones síncronas. Las pruebas de interfaces asíncronas existentes siguen esperando sus corutinas explícitamente; la lógica de migración continúa síncrona.
+
+## Aclaración de despliegue aprobada — 2026-09-29 (Prompt 11 B7)
+
+La referencia histórica anterior al fallback hacia `DATABASE_URL` queda
+**SUPERADA**. Se conserva como historia del ADR, no como instrucción vigente.
+Esta aclaración ratifica ADR-006 y la decisión humana de B7.
+
+Current deployment rules:
+
+- `sql/003_rls.sql` MUST NOT be executed.
+- Alembic requires `DATABASE_MIGRATION_URL`; no fallback to `DATABASE_URL`.
+
+La autoridad ejecutable es `backend/app/core/migration_config.py`:
+`migration_url(settings)` falla si falta `DATABASE_MIGRATION_URL`.
+`backend/migrations/env.py` usa esa función para los caminos online y offline.
+`DATABASE_URL` pertenece exclusivamente al runtime; `DATABASE_SCHEDULER_URL`,
+exclusivamente al descubrimiento del scheduler. No se comparten credenciales.
+
+La instrucción histórica del docstring de la migración 0001 sobre aplicar el
+SQL congelado también está superada; no se cambia ningún byte de esa migración.
+Véase el [runbook B7](../runbooks/prompt11-b7-production-deployment-readiness.md).

@@ -10,7 +10,11 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.app.modules.identity.errors import IdentityUnavailable
-from backend.app.modules.identity.policy import CurrentUser, OrganizationContext
+from backend.app.modules.identity.policy import (
+    CurrentUser,
+    OrganizationContext,
+    SystemAutomationContext,
+)
 
 PROTECTED_TABLES = (
     "organizations", "profiles", "organization_members", "platform_connections",
@@ -63,15 +67,18 @@ async def establish_user_context(session: AsyncSession, user: CurrentUser) -> No
     transaction = _root(session)
     previous = (await session.execute(text("""
         SELECT NULLIF(current_setting('app.user_id', true), ''),
-               NULLIF(current_setting('app.organization_id', true), '')
+               NULLIF(current_setting('app.organization_id', true), ''),
+               NULLIF(current_setting('app.execution_context', true), '')
     """))).one()
-    if previous != (None, None):
+    if previous != (None, None, None) or "security_context" in session.info:
         # Persistent/session context is contamination, never a trusted fallback.
         await session.invalidate()
         raise IdentityUnavailable()
     await session.execute(text("SELECT set_config('app.user_id', :value, true)"),
                           {"value": str(user.user_id)})
     await session.execute(text("SELECT set_config('app.organization_id', :value, true)"), {"value": ""})
+    await session.execute(text("SELECT set_config('app.execution_context', :value, true)"),
+                          {"value": ""})
     session.info["security_context"] = (transaction, user.user_id)
 
 
@@ -83,3 +90,27 @@ async def establish_organization_context(session: AsyncSession, context: Organiz
         raise IdentityUnavailable()
     await session.execute(text("SELECT set_config('app.organization_id', :value, true)"),
                           {"value": str(context.organization_id)})
+
+
+async def establish_system_automation_context(
+        session: AsyncSession, context: SystemAutomationContext) -> None:
+    if (not isinstance(context, SystemAutomationContext)
+            or not isinstance(context.organization_id, UUID)):
+        raise IdentityUnavailable()
+    transaction = _root(session)
+    previous = (await session.execute(text("""
+        SELECT NULLIF(current_setting('app.user_id', true), ''),
+               NULLIF(current_setting('app.organization_id', true), ''),
+               NULLIF(current_setting('app.execution_context', true), '')
+    """))).one()
+    if previous != (None, None, None) or "security_context" in session.info:
+        await session.invalidate()
+        raise IdentityUnavailable()
+    await session.execute(text("SELECT set_config('app.execution_context', :value, true)"),
+                          {"value": "system_automation"})
+    await session.execute(text("SELECT set_config('app.organization_id', :value, true)"),
+                          {"value": str(context.organization_id)})
+    await session.execute(text("SELECT set_config('app.user_id', :value, true)"), {"value": ""})
+    session.info["security_context"] = (
+        transaction, "system_automation", context.organization_id,
+    )
