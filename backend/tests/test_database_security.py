@@ -16,7 +16,12 @@ from backend.app.core.migration_config import migration_url
 from backend.app.main import create_app
 from backend.app.modules.identity import dependencies
 from backend.app.modules.identity.errors import Forbidden, IdentityUnavailable
-from backend.app.modules.identity.policy import CurrentUser, MemberRole, OrganizationContext
+from backend.app.modules.identity.policy import (
+    CurrentUser,
+    MemberRole,
+    OrganizationContext,
+    SystemAutomationContext,
+)
 from backend.app.modules.identity.repository import Membership
 from backend.app.modules.identity.service import IdentityService
 from backend.app.modules.identity.models import Organization, Profile
@@ -29,7 +34,7 @@ def session_mock():
     session.get_transaction = Mock(return_value=root)
     session.in_nested_transaction = Mock(return_value=False)
     result = Mock()
-    result.one.return_value = (None, None)
+    result.one.return_value = (None, None, None)
     session.execute.return_value = result
     return session
 
@@ -43,7 +48,8 @@ async def test_context_is_parameterized_and_transaction_local():
     await security.establish_organization_context(session, context)
     calls = session.execute.await_args_list
     assert [call.args[1] for call in calls[1:]] == [
-        {"value": str(user.user_id)}, {"value": ""}, {"value": str(context.organization_id)},
+        {"value": str(user.user_id)}, {"value": ""}, {"value": ""},
+        {"value": str(context.organization_id)},
     ]
     for call in calls[1:]:
         sql = str(call.args[0])
@@ -68,7 +74,11 @@ async def test_user_context_rejects_untrusted_or_nonroot_input(defect):
 
 
 @pytest.mark.anyio
-@pytest.mark.parametrize("previous", [("prior-user", None), (None, "prior-org")])
+@pytest.mark.parametrize("previous", [
+    ("prior-user", None, None),
+    (None, "prior-org", None),
+    (None, None, "system_automation"),
+])
 async def test_session_contamination_invalidates_connection(previous):
     session = session_mock()
     session.execute.return_value.one.return_value = previous
@@ -76,6 +86,56 @@ async def test_session_contamination_invalidates_connection(previous):
         await security.establish_user_context(session, CurrentUser(uuid4()))
     session.invalidate.assert_awaited_once()
     assert session.execute.await_count == 1
+
+
+@pytest.mark.anyio
+async def test_system_automation_context_is_tenant_local_and_has_no_user():
+    session = session_mock()
+    organization_id = uuid4()
+    await security.establish_system_automation_context(
+        session, SystemAutomationContext(organization_id),
+    )
+    calls = session.execute.await_args_list
+    assert [call.args[1] for call in calls[1:]] == [
+        {"value": "system_automation"},
+        {"value": str(organization_id)},
+        {"value": ""},
+    ]
+    assert session.info["security_context"] == (
+        session.get_transaction.return_value,
+        "system_automation",
+        organization_id,
+    )
+    for call in calls[1:]:
+        sql = str(call.args[0])
+        assert ":value" in sql and ", true)" in sql and "SET ROLE" not in sql
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize("contamination", [
+    ("prior-user", None, None),
+    (None, "prior-org", None),
+    (None, None, "user"),
+])
+async def test_system_context_rejects_database_contamination(contamination):
+    session = session_mock()
+    session.execute.return_value.one.return_value = contamination
+    with pytest.raises(IdentityUnavailable):
+        await security.establish_system_automation_context(
+            session, SystemAutomationContext(uuid4()),
+        )
+    session.invalidate.assert_awaited_once()
+
+
+@pytest.mark.anyio
+async def test_human_and_system_contexts_are_mutually_exclusive():
+    session = session_mock()
+    session.info["security_context"] = (
+        session.get_transaction.return_value, "system_automation", uuid4(),
+    )
+    with pytest.raises(IdentityUnavailable):
+        await security.establish_user_context(session, CurrentUser(uuid4()))
+    session.invalidate.assert_awaited_once()
 
 
 @pytest.mark.anyio

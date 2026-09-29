@@ -20,6 +20,7 @@ from backend.app.modules.automation.executor import (
 from backend.app.modules.automation.audit import PublicationAuditWriter
 from backend.app.modules.automation.schemas import (
     CredentialEnvelope,
+    ExecutionAuthority,
     ExecutionMode,
     ExecutionSnapshot,
     ExecutionStatus,
@@ -36,7 +37,11 @@ from backend.app.modules.integrations.facebook_provider import (
     ReconciliationDisposition,
     ReconciliationResult,
 )
-from backend.app.modules.identity.policy import MemberRole, OrganizationContext
+from backend.app.modules.identity.policy import (
+    MemberRole,
+    OrganizationContext,
+    SystemAutomationContext,
+)
 
 
 pytestmark = pytest.mark.anyio
@@ -85,6 +90,10 @@ class Store:
 
     async def prepare(self, organization, actor, job, now):
         self.calls.append(("prepare", now))
+        return self.preparation
+
+    async def prepare_system(self, organization, job, now):
+        self.calls.append(("prepare_system", now))
         return self.preparation
 
     async def begin_post(self, snapshot, now):
@@ -310,3 +319,49 @@ async def test_execution_audit_is_structural_and_redacted():
     }
     assert not ({"body", "message", "title", "link", "token", "ciphertext",
                  "providerResponse"} & set(after))
+
+
+async def test_system_executor_uses_separate_authority_and_system_audit_identity():
+    snapshot, cipher = encrypted_snapshot()
+    snapshot = replace(
+        snapshot,
+        actor_id=None,
+        authority=ExecutionAuthority.SYSTEM_AUTOMATION,
+    )
+    store, provider = Store(Preparation(snapshot=snapshot)), Provider()
+    result = await FacebookPublicationExecutor(
+        store, provider, cipher, clock=lambda: NOW,
+    ).execute_system(snapshot.organization_id, snapshot.job_id)
+    assert result.status == ExecutionStatus.PUBLISHED
+    assert [call[0] for call in store.calls] == [
+        "prepare_system", "begin_post", "finalize_provider",
+    ]
+    assert [call[0] for call in provider.calls] == ["publish"]
+
+    session = AsyncMock()
+    writer = PublicationAuditWriter(
+        session, SystemAutomationContext(snapshot.organization_id), uuid4(),
+    )
+    await writer.execution(
+        "publication.succeeded", content_id=snapshot.content_id,
+        job_id=snapshot.job_id, version_no=1, attempt_no=1,
+        status="succeeded", outcome="succeeded", reconciled=False,
+    )
+    params = session.execute.await_args.args[0].compile().params
+    assert params["actor_type"] == "system" and params["actor_id"] is None
+
+
+@pytest.mark.parametrize(("status", "error_code"), [
+    (ExecutionStatus.PERMANENT_FAILURE, "ORGANIZATION_INACTIVE"),
+    (ExecutionStatus.LEASE_UNAVAILABLE, None),
+])
+async def test_system_preparation_failure_never_calls_provider(status, error_code):
+    snapshot, cipher = encrypted_snapshot()
+    store = Store(Preparation(status=status, error_code=error_code))
+    provider = Provider()
+    result = await FacebookPublicationExecutor(
+        store, provider, cipher, clock=lambda: NOW,
+    ).execute_system(snapshot.organization_id, snapshot.job_id)
+    assert result.status == status and result.error_code == error_code
+    assert [call[0] for call in store.calls] == ["prepare_system"]
+    assert provider.calls == []

@@ -14,6 +14,12 @@ from backend.app.modules.identity.jwks import JWKSCache
 
 
 def pytest_addoption(parser):
+    parser.addoption("--prompt11-coordinator-postgres", action="store_true", default=False,
+                     help="Run B4 cross-role checks only on nightclub_ai_prompt11_coordinator_test")
+    parser.addoption("--prompt11-system-postgres", action="store_true", default=False,
+                     help="Run system automation RLS only on nightclub_ai_prompt11_system_test")
+    parser.addoption("--prompt11-scheduler-postgres", action="store_true", default=False,
+                     help="Run scheduler discovery RLS only on nightclub_ai_prompt11_scheduler_test")
     parser.addoption("--prompt10-postgres", action="store_true", default=False,
                      help="Run Facebook publication RLS on the guarded Prompt 10 B2-C/B2-D database")
     parser.addoption("--prompt9-postgres", action="store_true", default=False,

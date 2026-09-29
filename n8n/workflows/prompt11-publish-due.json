@@ -1,0 +1,225 @@
+{
+  "name": "Night Club AI — Publish Due",
+  "active": false,
+  "nodes": [
+    {
+      "id": "schedule",
+      "name": "Every minute",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [0, 0],
+      "retryOnFail": false,
+      "parameters": {"rule": {"interval": [{"field": "minutes", "minutesInterval": 1}]}}
+    },
+    {
+      "id": "timestamp",
+      "name": "Capture timestamp",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [220, 0],
+      "retryOnFail": false,
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {"assignments": [
+          {"id": "timestamp-value", "name": "timestamp", "value": "={{ Math.floor(Date.now() / 1000).toString() }}", "type": "string"}
+        ]},
+        "options": {}
+      }
+    },
+    {
+      "id": "canonical",
+      "name": "Build canonical payload",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [440, 0],
+      "retryOnFail": false,
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {"assignments": [
+          {"id": "stored-timestamp", "name": "timestamp", "value": "={{ $json.timestamp }}", "type": "string"},
+          {"id": "canonical-value", "name": "canonicalPayload", "value": "={{ \"v1\\nPOST\\n/internal/automation/publish-due\\n\" + $json.timestamp + \"\\ne3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\" }}", "type": "string"}
+        ]},
+        "options": {}
+      }
+    },
+    {
+      "id": "sign",
+      "name": "Sign with Crypto credential",
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 2,
+      "position": [660, 0],
+      "retryOnFail": false,
+      "parameters": {
+        "action": "hmac",
+        "type": "SHA256",
+        "binaryData": false,
+        "value": "={{ $json.canonicalPayload }}",
+        "dataPropertyName": "hmac",
+        "encoding": "hex"
+      }
+    },
+    {
+      "id": "request",
+      "name": "Publish due",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [880, 0],
+      "retryOnFail": false,
+      "parameters": {
+        "method": "POST",
+        "url": "https://nightclub-api.example.invalid/internal/automation/publish-due",
+        "authentication": "none",
+        "sendQuery": false,
+        "sendBody": false,
+        "sendHeaders": true,
+        "headerParameters": {"parameters": [
+          {"name": "X-N8N-Timestamp", "value": "={{ $json.timestamp }}"},
+          {"name": "X-N8N-Signature", "value": "={{ 'v1=' + $json.hmac.toLowerCase() }}"}
+        ]},
+        "options": {
+          "allowUnauthorizedCerts": false,
+          "redirect": {"redirect": {"followRedirects": false}},
+          "timeout": 90000,
+          "response": {"response": {"fullResponse": true, "neverError": true, "responseFormat": "autodetect"}}
+        }
+      }
+    },
+    {
+      "id": "route",
+      "name": "Route status",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.2,
+      "position": [1100, 0],
+      "retryOnFail": false,
+      "parameters": {
+        "mode": "rules",
+        "looseTypeValidation": false,
+        "rules": {"values": [
+          {
+            "conditions": {
+              "options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2},
+              "conditions": [{"id": "status-200", "leftValue": "={{ $json.statusCode }}", "rightValue": 200, "operator": {"type": "number", "operation": "equals"}}],
+              "combinator": "and"
+            },
+            "renameOutput": true,
+            "outputKey": "200"
+          },
+          {
+            "conditions": {
+              "options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2},
+              "conditions": [{"id": "status-401", "leftValue": "={{ $json.statusCode }}", "rightValue": 401, "operator": {"type": "number", "operation": "equals"}}],
+              "combinator": "and"
+            },
+            "renameOutput": true,
+            "outputKey": "401"
+          },
+          {
+            "conditions": {
+              "options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2},
+              "conditions": [{"id": "status-422", "leftValue": "={{ $json.statusCode }}", "rightValue": 422, "operator": {"type": "number", "operation": "equals"}}],
+              "combinator": "and"
+            },
+            "renameOutput": true,
+            "outputKey": "422"
+          },
+          {
+            "conditions": {
+              "options": {"caseSensitive": true, "leftValue": "", "typeValidation": "strict", "version": 2},
+              "conditions": [{"id": "status-503", "leftValue": "={{ $json.statusCode }}", "rightValue": 503, "operator": {"type": "number", "operation": "equals"}}],
+              "combinator": "and"
+            },
+            "renameOutput": true,
+            "outputKey": "503"
+          }
+        ]},
+        "options": {"fallbackOutput": "extra", "renameFallbackOutput": "other", "allMatchingOutputs": false}
+      }
+    },
+    {
+      "id": "success",
+      "name": "Operational counts only",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [1380, -320],
+      "retryOnFail": false,
+      "parameters": {
+        "mode": "manual",
+        "includeOtherFields": false,
+        "assignments": {"assignments": [
+          {"id": "selected", "name": "selected", "value": "={{ $json.body.data.selected }}", "type": "number"},
+          {"id": "processed", "name": "processed", "value": "={{ $json.body.data.processed }}", "type": "number"},
+          {"id": "published", "name": "published", "value": "={{ $json.body.data.published }}", "type": "number"},
+          {"id": "reconciledPublished", "name": "reconciledPublished", "value": "={{ $json.body.data.reconciledPublished }}", "type": "number"},
+          {"id": "retryScheduled", "name": "retryScheduled", "value": "={{ $json.body.data.retryScheduled }}", "type": "number"},
+          {"id": "permanentFailure", "name": "permanentFailure", "value": "={{ $json.body.data.permanentFailure }}", "type": "number"},
+          {"id": "notDue", "name": "notDue", "value": "={{ $json.body.data.notDue }}", "type": "number"},
+          {"id": "leaseUnavailable", "name": "leaseUnavailable", "value": "={{ $json.body.data.leaseUnavailable }}", "type": "number"},
+          {"id": "correlationId", "name": "correlationId", "value": "={{ $json.body.meta.correlationId }}", "type": "string"}
+        ]},
+        "options": {}
+      }
+    },
+    {
+      "id": "auth-failed",
+      "name": "Authentication failed",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [1380, -160],
+      "retryOnFail": false,
+      "parameters": {"errorType": "errorMessage", "errorMessage": "NIGHTCLUB_INTERNAL_AUTH_FAILED"}
+    },
+    {
+      "id": "contract-invalid",
+      "name": "Contract invalid",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [1380, 0],
+      "retryOnFail": false,
+      "parameters": {"errorType": "errorMessage", "errorMessage": "NIGHTCLUB_AUTOMATION_CONTRACT_INVALID"}
+    },
+    {
+      "id": "unavailable",
+      "name": "Automation unavailable",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [1380, 160],
+      "retryOnFail": false,
+      "parameters": {"errorType": "errorMessage", "errorMessage": "NIGHTCLUB_AUTOMATION_UNAVAILABLE"}
+    },
+    {
+      "id": "unexpected",
+      "name": "Unexpected response",
+      "type": "n8n-nodes-base.stopAndError",
+      "typeVersion": 1,
+      "position": [1380, 320],
+      "retryOnFail": false,
+      "parameters": {"errorType": "errorMessage", "errorMessage": "NIGHTCLUB_AUTOMATION_UNEXPECTED_RESPONSE"}
+    }
+  ],
+  "connections": {
+    "Every minute": {"main": [[{"node": "Capture timestamp", "type": "main", "index": 0}]]},
+    "Capture timestamp": {"main": [[{"node": "Build canonical payload", "type": "main", "index": 0}]]},
+    "Build canonical payload": {"main": [[{"node": "Sign with Crypto credential", "type": "main", "index": 0}]]},
+    "Sign with Crypto credential": {"main": [[{"node": "Publish due", "type": "main", "index": 0}]]},
+    "Publish due": {"main": [[{"node": "Route status", "type": "main", "index": 0}]]},
+    "Route status": {"main": [
+      [{"node": "Operational counts only", "type": "main", "index": 0}],
+      [{"node": "Authentication failed", "type": "main", "index": 0}],
+      [{"node": "Contract invalid", "type": "main", "index": 0}],
+      [{"node": "Automation unavailable", "type": "main", "index": 0}],
+      [{"node": "Unexpected response", "type": "main", "index": 0}]
+    ]}
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "timezone": "UTC",
+    "saveExecutionProgress": false,
+    "saveManualExecutions": false,
+    "saveDataSuccessExecution": "none",
+    "saveDataErrorExecution": "all",
+    "redactionPolicy": "all",
+    "executionTimeout": 120
+  }
+}

@@ -46,13 +46,13 @@ def api():
     return app, coordinator
 
 
-async def test_approved_connection_routes_are_registered_and_internal_executor_route_absent(api):
+async def test_approved_connection_routes_are_registered_with_separate_internal_trigger(api):
     app, _ = api
     routes = {(route.path, method) for route in app.routes for method in route.methods}
     assert ("/api/v1/connections", "GET") in routes
     assert ("/api/v1/connections/facebook/oauth/start", "POST") in routes
     assert ("/api/v1/connections/facebook/oauth/callback", "GET") in routes
-    assert ("/internal/automation/publish-due", "POST") not in routes
+    assert ("/internal/automation/publish-due", "POST") in routes
 
 
 async def test_connection_list_is_redacted(api):

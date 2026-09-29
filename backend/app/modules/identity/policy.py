@@ -43,6 +43,11 @@ class OrganizationContext:
     role: MemberRole
 
 
+@dataclass(frozen=True)
+class SystemAutomationContext:
+    organization_id: UUID
+
+
 ROLE_POLICY = MappingProxyType({
     MemberRole.OWNER: frozenset({Permission.ORGANIZATION_READ, Permission.CAMPAIGN_READ, Permission.CAMPAIGN_WRITE, Permission.CAMPAIGN_ARCHIVE, Permission.CONTENT_READ, Permission.CONTENT_WRITE, Permission.CONTENT_REVIEW}),
     MemberRole.MANAGER: frozenset({Permission.ORGANIZATION_READ, Permission.CAMPAIGN_READ, Permission.CAMPAIGN_WRITE, Permission.CAMPAIGN_ARCHIVE, Permission.CONTENT_READ, Permission.CONTENT_WRITE, Permission.CONTENT_REVIEW}),
