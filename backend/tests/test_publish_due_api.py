@@ -19,6 +19,7 @@ from backend.app.modules.automation.coordinator import PublishDueCoordinator
 from backend.app.modules.automation.discovery import DiscoveredPublicationJob
 from backend.app.modules.automation.internal_auth import canonical_payload
 from backend.app.modules.automation.schemas import ExecutionStatus, ExecutorResult
+from backend.app.modules.automation import publish_due_dependencies as composition
 from backend.app.api.internal.automation import publish_due
 
 
@@ -201,7 +202,7 @@ async def test_request_cancellation_is_not_translated_to_http_503():
         await publish_due(request)
 
 
-def test_production_composition_keeps_scheduler_and_runtime_roles_separate():
+def test_production_composition_keeps_scheduler_role_and_server_owned_limits():
     from backend.app.modules.automation.publish_due_dependencies import (
         get_publish_due_coordinator,
     )
@@ -216,7 +217,6 @@ def test_production_composition_keeps_scheduler_and_runtime_roles_separate():
     )))
     coordinator = get_publish_due_coordinator(request)
     assert coordinator._discovery._expected_role == "nightclub_scheduler"
-    assert coordinator._executor.store.expected_role == "nightclub_api"
     assert coordinator._batch_size == 8 and coordinator._max_concurrency == 4
 
 
@@ -258,3 +258,134 @@ async def test_lifespan_finishes_scheduler_disposal_when_cancelled(monkeypatch):
     with pytest.raises(asyncio.CancelledError):
         await task
     assert completed == ["disposed"] and app.state.http_client is None
+
+
+def production_application(monkeypatch, selected=(), **meta_settings):
+    """Keep real endpoint/composition/coordinator; replace only external boundaries."""
+    app = create_app(Settings(_env_file=None, n8n_internal_secret=CURRENT,
+                              **meta_settings))
+    app.state.http_client = object()
+    events = []
+
+    async def discover(self, limit):
+        assert self._expected_role == "nightclub_scheduler"
+        assert limit == 8
+        events.append("discovery_closed")
+        return selected
+
+    monkeypatch.setattr(composition.SQLAlchemyDueJobDiscovery, "discover", discover)
+    for name in ("MetaGraphPublicationAdapter", "CredentialCipher",
+                 "SQLAlchemyPublicationExecutionStore"):
+        constructor = getattr(composition, name)
+
+        def tracked(*args, _name=name, _constructor=constructor, **kwargs):
+            events.append(_name)
+            return _constructor(*args, **kwargs)
+
+        monkeypatch.setattr(composition, name, tracked)
+    return app, events
+
+
+@pytest.mark.parametrize("meta_settings", [
+    {},
+    {"meta_graph_api_version": "v24.0"},
+    {"meta_graph_api_version": "v24.0",
+     "meta_credential_encryption_key": "malformed-private-key"},
+])
+async def test_production_empty_batch_returns_200_without_initializing_meta(
+        monkeypatch, meta_settings):
+    app, events = production_application(monkeypatch, **meta_settings)
+    response = await call(app, signed())
+    assert response.status_code == 200
+    assert response.json()["data"] == ZERO.as_dict()
+    assert set(response.json()) == {"data", "meta"}
+    assert set(response.json()["meta"]) == {"correlationId"}
+    assert response.json()["meta"]["correlationId"] == response.headers["X-Correlation-Id"]
+    assert response.headers["Cache-Control"] == "no-store"
+    assert events == ["discovery_closed"]
+
+
+@pytest.mark.parametrize("meta_settings", [
+    {},
+    {"meta_graph_api_version": "v24.0"},
+    {"meta_graph_api_version": "v24.0",
+     "meta_credential_encryption_key": "malformed-private-key"},
+])
+async def test_production_nonempty_batch_requires_meta_before_executor_work(
+        monkeypatch, meta_settings):
+    org, job = uuid4(), uuid4()
+    app, events = production_application(
+        monkeypatch, (DiscoveredPublicationJob(org, job),), **meta_settings,
+    )
+
+    async def unexpected_execution(*_args, **_kwargs):
+        pytest.fail("Missing Meta configuration must never reach runtime/provider work")
+
+    monkeypatch.setattr(composition.FacebookPublicationExecutor, "execute_system",
+                        unexpected_execution)
+    response = await call(app, signed())
+    assert response.status_code == 503
+    assert response.json()["code"] == "AUTOMATION_UNAVAILABLE"
+    assert response.json()["detail"] == "Automation unavailable"
+    assert response.json()["correlationId"] == response.headers["X-Correlation-Id"]
+    assert response.headers["Cache-Control"] == "no-store"
+    assert events[0] == "discovery_closed"
+    assert str(org) not in response.text and str(job) not in response.text
+    assert "malformed-private-key" not in response.text
+
+
+async def test_production_nonempty_batch_initializes_one_executor_after_discovery(
+        monkeypatch):
+    org = uuid4()
+    selected = tuple(DiscoveredPublicationJob(org, uuid4()) for _ in range(3))
+    app, events = production_application(
+        monkeypatch, selected, meta_graph_api_version="v24.0",
+        meta_credential_encryption_key="AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8",
+    )
+    instances, executed = [], []
+
+    async def execute(self, organization_id, publication_job_id):
+        assert events[0] == "discovery_closed"
+        assert self.store.expected_role == "nightclub_api"
+        assert organization_id == org
+        instances.append(self)
+        executed.append(publication_job_id)
+        await asyncio.sleep(0)
+        return ExecutorResult(ExecutionStatus.NOT_DUE, publication_job_id)
+
+    monkeypatch.setattr(composition.FacebookPublicationExecutor, "execute_system", execute)
+    response = await call(app, signed())
+    assert response.status_code == 200
+    assert response.json()["data"] == {**ZERO.as_dict(), "selected": 3,
+                                      "processed": 3, "notDue": 3}
+    assert set(executed) == {job.publication_job_id for job in selected}
+    assert len({id(executor) for executor in instances}) == 1
+    assert events == ["discovery_closed", "MetaGraphPublicationAdapter",
+                      "SQLAlchemyPublicationExecutionStore", "CredentialCipher"]
+
+
+async def test_production_discovery_failure_is_not_reported_as_an_empty_batch(monkeypatch):
+    app, events = production_application(monkeypatch)
+
+    async def failed_discovery(self, limit):
+        events.append("discovery_failed")
+        raise RuntimeError("private scheduler failure")
+
+    monkeypatch.setattr(composition.SQLAlchemyDueJobDiscovery, "discover", failed_discovery)
+    response = await call(app, signed())
+    assert response.status_code == 503
+    assert response.json()["code"] == "AUTOMATION_UNAVAILABLE"
+    assert "private scheduler failure" not in response.text
+    assert events == ["discovery_failed"]
+
+
+@pytest.mark.parametrize("authenticated,path,status", [
+    (False, PATH, 401),
+    (True, PATH + "?limit=100", 422),
+])
+async def test_production_validation_precedes_discovery_and_meta(
+        monkeypatch, authenticated, path, status):
+    app, events = production_application(monkeypatch)
+    response = await call(app, signed() if authenticated else (), path=path)
+    assert response.status_code == status
+    assert events == []

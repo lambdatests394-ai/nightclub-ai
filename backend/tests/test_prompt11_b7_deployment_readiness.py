@@ -15,16 +15,16 @@ b7 = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(b7)
 
 
-def test_current_repository_contract():
-    b7.validate_repository()
+def test_historical_b7_rejects_the_recertified_source():
+    with pytest.raises(b7.ReadinessError, match="CERTIFIED_SOURCE_DRIFT"):
+        b7.validate_repository()
 
 
-def test_direct_cli_is_offline_and_reports_scope():
+def test_historical_b7_cli_reports_source_drift_without_echoing_source():
     result = subprocess.run([sys.executable, str(SCRIPT)], cwd=ROOT,
                             capture_output=True, text=True, check=False, timeout=45)
-    assert result.returncode == 0
-    assert "B7_OFFLINE_READINESS: PASS" in result.stdout
-    assert "PRODUCTION_STATE: NOT_VERIFIED" in result.stdout
+    assert result.returncode == 1
+    assert result.stdout == "B7_OFFLINE_READINESS: FAIL (CERTIFIED_SOURCE_DRIFT)\n"
     assert result.stderr == ""
 
 
@@ -83,10 +83,11 @@ def evidence_tree(tmp_path, monkeypatch):
     }
     snapshots = {path: b7.baseline_blob(ROOT, path)
                  for path in paths if path not in {b7.RUNBOOK, b7.REPORT}}
+    historical = set(b7.PRESERVED) | set(frozen.decode().splitlines())
     for path in paths:
         destination = tmp_path / path
         destination.parent.mkdir(parents=True, exist_ok=True)
-        destination.write_bytes((ROOT / path).read_bytes())
+        destination.write_bytes(snapshots[path] if path in historical else (ROOT / path).read_bytes())
     monkeypatch.setattr(b7, "baseline_blob", lambda root, path: snapshots[path])
     monkeypatch.setattr(b7, "git_read", lambda root, *args: frozen)
     return tmp_path

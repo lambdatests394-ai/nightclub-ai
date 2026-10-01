@@ -28,6 +28,24 @@ FROZEN_HASHES = {
     "backend/migrations/versions/20260923_0007_ai_generation_business_access.py": "1b10fcd120c0a181671697a16d8f424091942984c35837a6da5ae80e9412bc97",
 }
 
+# Migrations 0003-0005 were originally certified from a Windows CRLF checkout.
+# Git stores the same reviewed text with LF. Accept only these two exact byte
+# representations; every other historical migration remains byte-exact.
+FROZEN_EOL_EQUIVALENT_HASHES = {
+    "backend/migrations/versions/20260909_0003_identity_rls.py": frozenset({
+        "7c7d8b88fb6be79d7d8ab1b6243edfb4ac71ed8c73bd0d56f4f7bfd6e08863ca",
+        "593bc6d187d76591eb57bcb0f13a40671594400c116197d6bda8fe07b890af10",
+    }),
+    "backend/migrations/versions/20260910_0004_campaign_business_access.py": frozenset({
+        "1cd3b3c2b46533165707f775453e90ba3f2e18b822ca12c6a388a044d9485990",
+        "e9f99b93fcd3f0599514a66167cb8fb14987ab206f65690047e33ceefdb13483",
+    }),
+    "backend/migrations/versions/20260910_0005_content_business_access.py": frozenset({
+        "913093b98df2ea5c70488686e5249a2c9b729bbd54c9bce4d71183f499ed37ed",
+        "173c736bbe76600d456ff910a3633253426b13a14c401c282bd4d024a22139c6",
+    }),
+}
+
 
 def load_migration():
     spec = spec_from_file_location("prompt10_b2a_gate", ROOT / MIGRATION)
@@ -75,7 +93,19 @@ def test_exact_prompt10_policy_and_table_certification_counts(migration):
 
 def test_historical_sql_and_migrations_are_byte_frozen():
     for relative, expected in FROZEN_HASHES.items():
-        assert hashlib.sha256((ROOT / relative).read_bytes()).hexdigest() == expected
+        allowed = FROZEN_EOL_EQUIVALENT_HASHES.get(relative, frozenset({expected}))
+        assert hashlib.sha256((ROOT / relative).read_bytes()).hexdigest() in allowed
+
+
+def test_eol_equivalence_does_not_accept_other_historical_bytes(tmp_path):
+    for relative, allowed in FROZEN_EOL_EQUIVALENT_HASHES.items():
+        source = (ROOT / relative).read_bytes().replace(b"\r\n", b"\n")
+        lf = hashlib.sha256(source).hexdigest()
+        crlf = hashlib.sha256(source.replace(b"\n", b"\r\n")).hexdigest()
+        assert {lf, crlf} == set(allowed)
+        changed = tmp_path / Path(relative).name
+        changed.write_bytes(source + b"\n# unreviewed historical change\n")
+        assert hashlib.sha256(changed.read_bytes()).hexdigest() not in allowed
 
 
 def test_migration_has_no_privileged_role_or_destructive_access_ddl():
