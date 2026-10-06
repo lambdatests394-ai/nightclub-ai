@@ -30,6 +30,24 @@ class FacebookOAuthStartRequest(ApiSchema):
     requested_page_id: str = Field(min_length=1, max_length=128, pattern=r"^[1-9][0-9]*$")
 
 
+class FacebookOAuthCompleteRequest(ApiSchema):
+    """Browser return submitted through the existing authenticated boundary."""
+
+    model_config = ConfigDict(extra="forbid", hide_input_in_errors=True)
+    state: SecretStr = Field(repr=False, exclude=True)
+    code: SecretStr = Field(repr=False, exclude=True)
+
+    @field_validator("state", "code")
+    @classmethod
+    def bounded_exact_value(cls, value: SecretStr, info) -> SecretStr:
+        raw = value.get_secret_value()
+        limit = 4096 if info.field_name == "state" else 2048
+        if (not raw or len(raw) > limit or raw != raw.strip()
+                or any(ord(ch) < 32 or 127 <= ord(ch) <= 159 for ch in raw)):
+            raise ValueError("Invalid OAuth return")
+        return value
+
+
 class FacebookCapabilities(ApiSchema):
     """Allow-listed provider-derived capability flags."""
 

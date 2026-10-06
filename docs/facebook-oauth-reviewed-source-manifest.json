@@ -1,0 +1,87 @@
+{
+  "formatVersion": 1,
+  "checkpoint": "1a1684af14c42b81b23feb67d0d5f413a5c33ad1",
+  "b7Baseline": "301fe0f0c8bb2e0bff1c7f8a042e1aa2bb794529",
+  "files": [
+    {
+      "path": ".env.example",
+      "sha256": "170d6e885bacc2d5001f8e56b26fd111454751a833abec2acbb487fd9a4610c2",
+      "sha256LF": "170d6e885bacc2d5001f8e56b26fd111454751a833abec2acbb487fd9a4610c2"
+    },
+    {
+      "path": "backend/app/api/v1/connections.py",
+      "sha256": "d4b2cd83e5a3f6710ee48c4dd92dacf7409f533ef7ee22ce5662a6e25f4c155c",
+      "sha256LF": "d4b2cd83e5a3f6710ee48c4dd92dacf7409f533ef7ee22ce5662a6e25f4c155c"
+    },
+    {
+      "path": "backend/app/core/config.py",
+      "sha256": "dd47cef47e43c8072155902ee278e51bcd08dcec6bf0ad025ec48379b8c9622e",
+      "sha256LF": "dd47cef47e43c8072155902ee278e51bcd08dcec6bf0ad025ec48379b8c9622e"
+    },
+    {
+      "path": "backend/app/main.py",
+      "sha256": "95a76ee9da4c321605a2d631e2d660194e9ae26368144083fb3911c78bd08723",
+      "sha256LF": "95a76ee9da4c321605a2d631e2d660194e9ae26368144083fb3911c78bd08723"
+    },
+    {
+      "path": "backend/app/modules/integrations/schemas.py",
+      "sha256": "f22dddc4b1dd29bc57681b810415b04b511be63e8629e24e98b8aec7a06c0211",
+      "sha256LF": "f22dddc4b1dd29bc57681b810415b04b511be63e8629e24e98b8aec7a06c0211"
+    },
+    {
+      "path": "backend/app/api/admin/__init__.py",
+      "sha256": "b1c65431269dc2b1a8622e45dabbf42f673d6c62a69c67ef2570e570017f7029",
+      "sha256LF": "b1c65431269dc2b1a8622e45dabbf42f673d6c62a69c67ef2570e570017f7029"
+    },
+    {
+      "path": "backend/app/api/admin/facebook.py",
+      "sha256": "cf5ca8cbafb2d08ae75acdc082eaba6b35e848346ce1b1592fe913ea7eeeba12",
+      "sha256LF": "cf5ca8cbafb2d08ae75acdc082eaba6b35e848346ce1b1592fe913ea7eeeba12"
+    },
+    {
+      "path": "backend/app/modules/integrations/admin_ui/index.html",
+      "sha256": "26aa002ba02427174a8b221e58cf8d821a6b629160200d5ad61f3cdbc77e3538",
+      "sha256LF": "26aa002ba02427174a8b221e58cf8d821a6b629160200d5ad61f3cdbc77e3538"
+    },
+    {
+      "path": "backend/app/modules/integrations/admin_ui/return.html",
+      "sha256": "77721a3efe093030f6b761927e768102e40099e06cbc5c1a0a8529ad81b63e26",
+      "sha256LF": "77721a3efe093030f6b761927e768102e40099e06cbc5c1a0a8529ad81b63e26"
+    },
+    {
+      "path": "backend/app/modules/integrations/admin_ui/admin.js",
+      "sha256": "72eabcadf9d2e9c74557c1c6cf74b5b1f3a0350952f956f6c7db6a8345a396ec",
+      "sha256LF": "72eabcadf9d2e9c74557c1c6cf74b5b1f3a0350952f956f6c7db6a8345a396ec"
+    },
+    {
+      "path": "backend/app/modules/integrations/admin_ui/return.js",
+      "sha256": "06ef59a05403db4e592dcc937bb0a1fca2e458ffd3d5c716b7735301d217e32f",
+      "sha256LF": "06ef59a05403db4e592dcc937bb0a1fca2e458ffd3d5c716b7735301d217e32f"
+    },
+    {
+      "path": "backend/app/modules/integrations/admin_ui/style.css",
+      "sha256": "7f2ca579547a1765edd534d336fefa6b1b7d264b31d04ea260b89b3276addd4e",
+      "sha256LF": "7f2ca579547a1765edd534d336fefa6b1b7d264b31d04ea260b89b3276addd4e"
+    },
+    {
+      "path": "backend/tests/test_facebook_admin.py",
+      "sha256": "5f5a1fe9dac8efbd1a088561d52268d49846ca89e02c0769b4727832facdca23",
+      "sha256LF": "5f5a1fe9dac8efbd1a088561d52268d49846ca89e02c0769b4727832facdca23"
+    },
+    {
+      "path": "backend/tests/facebook_admin_logic.test.cjs",
+      "sha256": "cac84b2c7d9adfb23cf715b4ce845edb67bce4509285aee458ef3659695991f9",
+      "sha256LF": "cac84b2c7d9adfb23cf715b4ce845edb67bce4509285aee458ef3659695991f9"
+    },
+    {
+      "path": "backend/tests/facebook_admin_browser.cjs",
+      "sha256": "2692cd51d7a3c61f68d8db2c11f229ff2d315e8f6ae5bfba6eb3b772a19e2218",
+      "sha256LF": "2692cd51d7a3c61f68d8db2c11f229ff2d315e8f6ae5bfba6eb3b772a19e2218"
+    },
+    {
+      "path": "docs/runbooks/facebook-oauth-local-preparation.md",
+      "sha256": "167b3065a26e2abacb70cb6fba64ac7adffe40645d6cc373e307656a67ffa633",
+      "sha256LF": "167b3065a26e2abacb70cb6fba64ac7adffe40645d6cc373e307656a67ffa633"
+    }
+  ]
+}

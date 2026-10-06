@@ -14,7 +14,8 @@ from backend.app.modules.integrations.errors import (
     FacebookInvalidConnection,
     FacebookInvalidOAuthState,
 )
-from backend.app.modules.integrations.schemas import FacebookOAuthStartRequest
+from backend.app.modules.integrations.schemas import FacebookOAuthStartRequest, FacebookOAuthCompleteRequest
+from backend.app.api.admin.facebook import require_facebook_admin
 
 
 router = APIRouter(prefix="/api/v1/connections", tags=["connections"])
@@ -73,4 +74,12 @@ async def facebook_oauth_callback(request: Request, coordinator: Coordinator):
         callback_value(request, "state", 4096),
         callback_value(request, "code", 2048),
     )
+    return envelope(request, data)
+
+
+@router.post("/facebook/oauth/complete", dependencies=[Depends(require_facebook_admin)])
+async def facebook_oauth_complete(
+        body: FacebookOAuthCompleteRequest, request: Request, coordinator: Coordinator):
+    # Reuse JWT, organization/RBAC, state consumption and encrypted persistence.
+    data = await coordinator.callback(body.state.get_secret_value(), body.code.get_secret_value())
     return envelope(request, data)

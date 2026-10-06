@@ -18,6 +18,7 @@ from backend.app.api.v1.content import router as content_router
 from backend.app.api.v1.assets import router as assets_router
 from backend.app.api.v1.ai import router as ai_router
 from backend.app.api.v1.connections import router as connections_router
+from backend.app.api.admin.facebook import router as facebook_admin_router
 from backend.app.api.internal.automation import router as internal_automation_router
 from backend.app.core.scheduler_database import dispose_scheduler_engine
 from backend.app.modules.ai.registry import ProviderRegistry
@@ -139,6 +140,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(assets_router)
     application.include_router(ai_router)
     application.include_router(connections_router)
+    application.include_router(facebook_admin_router)
     application.include_router(internal_automation_router)
     return application
 
