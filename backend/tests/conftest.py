@@ -14,6 +14,8 @@ from backend.app.modules.identity.jwks import JWKSCache
 
 
 def pytest_addoption(parser):
+    parser.addoption("--facebook-oauth-postgres", action="store_true", default=False,
+                     help="Run OAuth HTTP transactions only on the isolated OAuth container")
     parser.addoption("--prompt11-coordinator-postgres", action="store_true", default=False,
                      help="Run B4 cross-role checks only on nightclub_ai_prompt11_coordinator_test")
     parser.addoption("--prompt11-system-postgres", action="store_true", default=False,

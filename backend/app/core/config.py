@@ -66,6 +66,16 @@ class Settings(BaseSettings):
     meta_credential_encryption_key: SecretStr = Field(default=SecretStr(""), repr=False, exclude=True)
     meta_credential_key_version: int = Field(default=1, ge=1)
     meta_oauth_state_key: SecretStr = Field(default=SecretStr(""), repr=False, exclude=True)
+    facebook_oauth_admin_enabled: bool = False
+    supabase_publishable_key: str = Field(default="", repr=False, exclude=True)
+
+    @field_validator("supabase_publishable_key")
+    @classmethod
+    def public_auth_key(cls, value: str) -> str:
+        # Do not accidentally serve an anon JWT, service-role JWT or secret key.
+        if value and not re.fullmatch(r"sb_publishable_[A-Za-z0-9_-]{16,200}", value):
+            raise ValueError("The administrative UI requires a Supabase publishable key")
+        return value
 
     @field_validator("n8n_internal_secret", "n8n_internal_secret_previous")
     @classmethod
